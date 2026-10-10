@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import QRCodeComponent from 'react-qr-code';
 const QRCode = (QRCodeComponent as any).default || QRCodeComponent;
-import { ArrowLeft, ArrowRightLeft, FileText, Loader2, Package, Paperclip, ShieldAlert, UserCheck, Wrench } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, CheckCircle2, FileText, Loader2, Package, Paperclip, ShieldAlert, UserCheck, Wrench } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -83,6 +83,8 @@ export const ToolChildDetail: React.FC = () => {
         }
         payload.actualCost = Number(window.prompt('Chi phí thực tế', '0') || 0);
         payload.note = window.prompt('Ghi chú hoàn tất', '') || '';
+      } else if (action === 'mark-found') {
+        payload.note = window.prompt('Ghi chú tìm lại', '') || '';
       } else {
         payload.note = window.prompt('Ghi chú/lý do', '') || '';
       }
@@ -140,8 +142,6 @@ export const ToolChildDetail: React.FC = () => {
     );
   }
 
-  const qrUrl = `${window.location.origin}/ccdc-child/${child.id}`;
-
   return (
     <div className="max-w-5xl mx-auto space-y-4 px-3 sm:px-4 pb-16">
       <button onClick={() => navigate(`/tools/${child.parentCcdcId}`)} className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-900">
@@ -156,7 +156,7 @@ export const ToolChildDetail: React.FC = () => {
             <p className="text-sm font-bold text-slate-600 mt-2">{child.parent?.toolName}</p>
             <span className="inline-flex mt-3 px-3 py-1 rounded-full bg-primary-50 text-primary-700 text-xs font-black">{statusLabels[child.childStatus] || child.childStatus}</span>
           </div>
-          <div className="bg-white p-3 border border-slate-200 rounded-xl w-fit"><QRCode value={qrUrl} size={120} /></div>
+          <div className="bg-white p-3 border border-slate-200 rounded-xl w-fit"><QRCode value={child.childCode} size={120} /></div>
         </div>
 
         {canOperate && (
@@ -167,7 +167,10 @@ export const ToolChildDetail: React.FC = () => {
               <ActionButton label="Thu hồi" icon={<Package />} onClick={() => quickAction('return')} />
               {child.childStatus === 'RETURNED' && <ActionButton label="Nhập kho" icon={<Package />} onClick={() => quickAction('confirm-stock-in')} />}
               <ActionButton label="Báo hỏng" icon={<ShieldAlert />} onClick={() => quickAction('report-damage')} />
+            {child.childStatus === 'DAMAGED' && <ActionButton label="Đưa đi sửa" icon={<Wrench />} onClick={() => quickAction('start-repair')} />}
+            {child.childStatus === 'REPAIRING' && <ActionButton label="Đã sửa xong" icon={<CheckCircle2 />} onClick={() => quickAction('complete-repair')} />}
             <ActionButton label="Báo mất" icon={<ShieldAlert />} onClick={() => quickAction('mark-lost')} />
+            {child.childStatus === 'LOST' && <ActionButton label="Đã tìm lại" icon={<CheckCircle2 />} onClick={() => quickAction('mark-found')} />}
             <ActionButton label="Kiểm kê" icon={<FileText />} onClick={() => quickAction('inventory-check')} />
           </div>
         )}

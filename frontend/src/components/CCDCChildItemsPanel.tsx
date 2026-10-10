@@ -320,6 +320,14 @@ export const CCDCChildItemsPanel: React.FC<{ parentTool: any }> = ({ parentTool 
         payload.location = window.prompt('Vị trí nhập kho', child.location || 'KHO CCDC') || child.location;
       } else if (['report-damage', 'mark-lost', 'liquidate'].includes(action)) {
         payload.note = window.prompt('Ghi chú/lý do', '') || '';
+      } else if (action === 'start-repair') {
+        payload.damageDescription = window.prompt('Mô tả hư hỏng', child.note || '') || child.note;
+        payload.note = window.prompt('Nội dung sửa chữa', '') || '';
+      } else if (action === 'complete-repair') {
+        payload.result = 'SUCCESS';
+        payload.note = window.prompt('Ghi chú hoàn tất sửa chữa', '') || '';
+      } else if (action === 'mark-found') {
+        payload.note = window.prompt('Ghi chú tìm lại', '') || '';
       } else if (action === 'cancel') {
         const reason = window.prompt('Lý do hủy mã con');
         if (!reason) return;
@@ -397,16 +405,16 @@ export const CCDCChildItemsPanel: React.FC<{ parentTool: any }> = ({ parentTool 
   };
 
   const printQr = (child: ChildItem) => {
-    const url = `${window.location.origin}/ccdc-child/${child.id}`;
     const win = window.open('', '_blank');
     if (!win) return;
+    const qrSvg = document.getElementById(`ccdc-child-qr-${child.id}`)?.querySelector('svg')?.outerHTML || '';
     win.document.write(`
-      <html><head><title>QR ${child.childCode}</title><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script></head>
+      <html><head><title>Tem ${child.childCode}</title></head>
       <body style="font-family:Arial;padding:24px;text-align:center">
-        <div id="qr" style="display:inline-block"></div>
+        <div style="display:inline-block">${qrSvg}</div>
         <h3>${child.childCode}</h3>
         <p>${parentTool.toolName || ''}</p>
-        <script>new QRCode(document.getElementById('qr'), { text: ${JSON.stringify(url)}, width: 160, height: 160 }); setTimeout(() => window.print(), 400);</script>
+        <script>setTimeout(() => window.print(), 100);</script>
       </body></html>
     `);
     win.document.close();
@@ -492,7 +500,6 @@ export const CCDCChildItemsPanel: React.FC<{ parentTool: any }> = ({ parentTool 
           </thead>
           <tbody className="divide-y divide-slate-100">
             {items.map(child => {
-              const qrUrl = `${window.location.origin}/ccdc-child/${child.id}`;
               return (
                 <tr key={child.id} className="hover:bg-slate-50/70">
                   <td className="p-3">
@@ -506,7 +513,7 @@ export const CCDCChildItemsPanel: React.FC<{ parentTool: any }> = ({ parentTool 
                     <button onClick={() => navigate(`/ccdc-child/${child.id}`)} className="font-mono text-xs font-black text-primary-700 hover:underline">{child.childCode}</button>
                     <p className="text-[11px] text-slate-400 font-bold mt-1">{child.parentCode}</p>
                   </td>
-                  <td className="p-3"><div className="h-12 w-12 bg-white"><QRCode value={qrUrl} size={48} /></div></td>
+                  <td className="p-3"><div id={`ccdc-child-qr-${child.id}`} className="h-12 w-12 bg-white"><QRCode value={child.childCode} size={48} /></div></td>
                   <td className="p-3">
                     <span className={`inline-flex px-2 py-1 rounded-lg border text-[10px] font-black uppercase ${statusClass[child.childStatus] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{statusLabels[child.childStatus] || child.childStatus}</span>
                     <p className="text-[11px] text-slate-400 font-bold mt-1">KK: {child.inventoryStatus}</p>
@@ -533,6 +540,9 @@ export const CCDCChildItemsPanel: React.FC<{ parentTool: any }> = ({ parentTool 
                       <IconButton title="Nhập kho" onClick={() => runAction(child, 'confirm-stock-in')}><Download className="h-3.5 w-3.5" /></IconButton>
                       <IconButton title="Báo hỏng" onClick={() => runAction(child, 'report-damage')}><AlertTriangle className="h-3.5 w-3.5" /></IconButton>
                       <IconButton title="Báo mất" onClick={() => runAction(child, 'mark-lost')}><ShieldAlert className="h-3.5 w-3.5" /></IconButton>
+                      {child.childStatus === 'DAMAGED' && <button title="Đưa đi sửa" onClick={() => runAction(child, 'start-repair')} className="px-2 h-8 rounded-lg border border-teal-200 bg-white text-[10px] font-black text-teal-700 hover:bg-teal-50">Sửa</button>}
+                      {child.childStatus === 'REPAIRING' && <button title="Đã sửa xong" onClick={() => runAction(child, 'complete-repair')} className="px-2 h-8 rounded-lg border border-emerald-200 bg-white text-[10px] font-black text-emerald-700 hover:bg-emerald-50">Sửa xong</button>}
+                      {child.childStatus === 'LOST' && <button title="Đã tìm lại" onClick={() => runAction(child, 'mark-found')} className="px-2 h-8 rounded-lg border border-emerald-200 bg-white text-[10px] font-black text-emerald-700 hover:bg-emerald-50">Tìm lại</button>}
                       <button title="Thanh lý" onClick={() => runAction(child, 'liquidate')} className="px-2 h-8 rounded-lg border border-slate-200 bg-white text-[10px] font-black text-slate-600 hover:bg-slate-50">TL</button>
                       <button title="Hủy" onClick={() => runAction(child, 'cancel')} className="px-2 h-8 rounded-lg border border-amber-200 bg-white text-[10px] font-black text-amber-700 hover:bg-amber-50">Hủy</button>
                       <IconButton title="Xóa mềm" onClick={() => runAction(child, 'delete')}><Trash2 className="h-3.5 w-3.5" /></IconButton>

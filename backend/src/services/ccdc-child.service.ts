@@ -78,7 +78,9 @@ export class CCDCChildService {
       select: { childStatus: true, quantity: true }
     });
 
-    const count = (status: ChildStatus) => children.filter((item: any) => item.childStatus === status).length;
+    const count = (status: ChildStatus) => children
+      .filter((item: any) => item.childStatus === status)
+      .reduce((sum: number, item: any) => sum + Math.max(1, Math.floor(Number(item.quantity || 1))), 0);
     const createdQuantity = children
       .filter((item: any) => item.childStatus !== 'CANCELLED')
       .reduce((sum: number, item: any) => sum + Math.max(1, Math.floor(Number(item.quantity || 1))), 0);
@@ -467,6 +469,14 @@ export class CCDCChildService {
     return this.updateStatus(childId, 'LOST', performedBy, data, 'LOST');
   }
 
+  static async markFound(childId: number, data: any, performedBy: string) {
+    const child = await prisma.cCDCChildItem.findUnique({ where: { id: childId } });
+    if (!child || child.deletedAt) throw new Error('Không tìm thấy mã con CCDC.');
+    if (child.childStatus !== 'LOST') throw new Error('Chỉ mã con đang báo mất mới được xác nhận tìm lại.');
+    const restoredStatus: ChildStatus = child.user ? 'IN_USE' : 'AVAILABLE';
+    return this.updateStatus(childId, restoredStatus, performedBy, data, 'FOUND');
+  }
+
   static async liquidate(childId: number, data: any, performedBy: string) {
     await this.ensureApprovedRequest(childId, 'LIQUIDATE', data.approvedRequestId);
     return this.updateStatus(childId, 'LIQUIDATED', performedBy, data, 'LIQUIDATE');
@@ -811,14 +821,17 @@ export class CCDCChildService {
       if (params.project && !(parent.projectName || parent.buildingName || '').toLowerCase().includes(String(params.project).toLowerCase())) return false;
       return true;
     });
-    const count = (status: string) => filtered.filter((item: any) => item.childStatus === status).length;
+    const itemQuantity = (item: any) => Math.max(1, Math.floor(Number(item.quantity || 1)));
+    const count = (status: string) => filtered
+      .filter((item: any) => item.childStatus === status)
+      .reduce((sum: number, item: any) => sum + itemQuantity(item), 0);
     const groupBy = (field: string) => filtered.reduce((acc: Record<string, number>, item: any) => {
       const key = item[field] || 'Chưa cập nhật';
-      acc[key] = (acc[key] || 0) + 1;
+      acc[key] = (acc[key] || 0) + itemQuantity(item);
       return acc;
     }, {});
     return {
-      total: filtered.length,
+      total: filtered.reduce((sum: number, item: any) => sum + itemQuantity(item), 0),
       inUse: count('IN_USE'),
       available: count('AVAILABLE'),
       transferring: count('TRANSFERRING'),

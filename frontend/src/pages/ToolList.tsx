@@ -644,7 +644,10 @@ export const ToolList: React.FC = () => {
             toolIds: type === 'ALLOCATE'
               ? modalItems.map(i => i.toolId)
               : individualItems.map(i => i.toolId),
-            autoComplete: false
+            // The user has already confirmed this operation in the wizard.
+            // Complete the document immediately so individual CCDC moves from
+            // IN_STOCK to USING instead of remaining "Khả dụng".
+            autoComplete: true
           });
           createdHandoverDocId = docRes.data.id;
         } catch (docErr) {
@@ -755,6 +758,21 @@ export const ToolList: React.FC = () => {
       fetchTools();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Lỗi báo mất.");
+    }
+  };
+
+  const restoreNormalStatus = async (tool: any, action: 'repair-complete' | 'found') => {
+    const label = action === 'repair-complete' ? 'xác nhận đã sửa xong' : 'xác nhận đã tìm lại';
+    if (!window.confirm(`Bạn có chắc muốn ${label} cho ${tool.toolCode}?`)) return;
+    try {
+      await api.post(`/tools/${tool.id}/${action}`, {
+        note: action === 'repair-complete' ? 'Đã sửa xong, tiếp tục sử dụng bình thường' : 'Đã tìm lại CCDC'
+      });
+      toast.success(action === 'repair-complete' ? 'CCDC đã trở về trạng thái bình thường.' : 'Đã ghi nhận tìm lại CCDC.');
+      setOpenActionMenuId(null);
+      await fetchTools();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không thể cập nhật trạng thái CCDC.');
     }
   };
 
@@ -1481,6 +1499,22 @@ export const ToolList: React.FC = () => {
                                   >
                                     <ShieldAlert className="h-3.5 w-3.5 text-red-500" /> Báo mất
                                   </button>
+                                  {tool.status === 'DAMAGED' && (
+                                    <button
+                                      onClick={() => restoreNormalStatus(tool, 'repair-complete')}
+                                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                    >
+                                      <CheckCircle2 className="h-3.5 w-3.5" /> Đã sửa xong
+                                    </button>
+                                  )}
+                                  {tool.status === 'LOST' && (
+                                    <button
+                                      onClick={() => restoreNormalStatus(tool, 'found')}
+                                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                    >
+                                      <RotateCcw className="h-3.5 w-3.5" /> Đã tìm lại
+                                    </button>
+                                  )}
                                 </>
                               )}
                               <div className="mx-3 my-1 border-t border-slate-100" />
@@ -2374,25 +2408,28 @@ export const ToolList: React.FC = () => {
 
         const handlePrint = () => {
           const printItems = selectedToolsToPrint.flatMap(tool => {
-            const url = `${window.location.origin}/tools/${tool.id}`;
-            return Array(copies).fill({ tool, url });
+            // Match asset labels: QR contains the business code itself, so it
+            // also works with scanners and inventory input without a web URL.
+            return Array(copies).fill({ tool, value: tool.toolCode });
           });
 
           const printWindow = window.open('', '_blank', 'width=900,height=700');
           if (!printWindow) { toast.error('Trình duyệt đã chặn cửa sổ in. Vui lòng cho phép pop-up.'); return; }
 
-          const qrSvgs = printItems.map(({ tool, url }) => {
-            const container = document.createElement('div');
-            container.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${currentSize.qrSize} ${currentSize.qrSize}" width="${currentSize.qrSize}" height="${currentSize.qrSize}" data-url="${url}" data-name="${tool.toolName}" data-code="${tool.toolCode}" data-dept="${tool.departmentName || ''}" data-loc="${tool.locationName || ''}"></svg>`;
-            return { tool, url };
-          });
+          const printableItems = printItems.map(({ tool, value }) => ({
+            value,
+            name: tool.toolName,
+            code: tool.toolCode,
+            dept: tool.departmentName || '',
+            loc: (() => { const parts = (tool.locationName || '').split(' - '); return parts[parts.length - 1] || tool.locationName || ''; })(),
+            qrSvg: document.getElementById(`tool-print-qr-${tool.id}`)?.querySelector('svg')?.outerHTML || ''
+          }));
 
           printWindow.document.write(`<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
   <title>In tem QR CCDC - Danko Group</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Arial', sans-serif; background: #f1f5f9; padding: 20px; }
@@ -2441,13 +2478,7 @@ export const ToolList: React.FC = () => {
   </div>
   <div class="grid" id="grid"></div>
   <script>
-    const items = ${JSON.stringify(printItems.map(({ tool, url }) => ({
-      url,
-      name: tool.toolName,
-      code: tool.toolCode,
-      dept: tool.departmentName || '',
-      loc: (() => { const parts = (tool.locationName || '').split(' - '); return parts[parts.length - 1] || tool.locationName || ''; })()
-    })))};
+    const items = ${JSON.stringify(printableItems)};
     const grid = document.getElementById('grid');
     items.forEach((item, idx) => {
       const card = document.createElement('div');
@@ -2458,7 +2489,7 @@ export const ToolList: React.FC = () => {
           <span class="logo-text">Danko Group</span>
         </div>
         <div class="label-body">
-          <div class="label-qr" id="qr\${idx}"></div>
+          <div class="label-qr">\${item.qrSvg}</div>
           <div class="label-info">
             <div class="label-name">\${item.name}</div>
             <div class="label-code">\${item.code}</div>
@@ -2466,19 +2497,11 @@ export const ToolList: React.FC = () => {
           </div>
         </div>
         <div class="label-footer">
-          <span>Scan to view details</span>
+          <span>QR: Mã CCDC</span>
           <span>${new Date().toLocaleDateString('vi-VN')}</span>
         </div>
       \`;
       grid.appendChild(card);
-      try {
-        new QRCode(document.getElementById('qr' + idx), {
-          text: item.url,
-          width: ${currentSize.qrSize},
-          height: ${currentSize.qrSize},
-          correctLevel: QRCode.CorrectLevel.M
-        });
-      } catch(e) {}
     });
   <\/script>
 </body>
@@ -2536,7 +2559,6 @@ export const ToolList: React.FC = () => {
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Xem trước ({selectedToolsToPrint.length} loại CCDC)</p>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {selectedToolsToPrint.map(tool => {
-                    const url = `${window.location.origin}/tools/${tool.id}`;
                     const locParts = (tool.locationName || '').split(' - ');
                     const shortLoc = locParts[locParts.length - 1] || tool.locationName || '';
                     return (
@@ -2548,8 +2570,8 @@ export const ToolList: React.FC = () => {
                         </div>
                         {/* Tem body */}
                         <div className="p-3 flex gap-2.5 items-center">
-                          <div className="shrink-0 p-1 border border-slate-200 rounded-lg bg-white">
-                            <QRCode value={url} size={currentSize.qrSize * 0.85} />
+                          <div id={`tool-print-qr-${tool.id}`} className="shrink-0 p-1 border border-slate-200 rounded-lg bg-white">
+                            <QRCode value={tool.toolCode} size={currentSize.qrSize * 0.85} />
                           </div>
                           <div className="min-w-0 flex flex-col gap-1">
                             <p className="text-[9px] font-black text-slate-800 leading-snug line-clamp-3">{tool.toolName}</p>
@@ -2561,7 +2583,7 @@ export const ToolList: React.FC = () => {
                         </div>
                         {/* Tem footer */}
                         <div className="border-t border-dashed border-slate-200 px-3 py-1 flex justify-between">
-                          <span className="text-[8px] text-slate-400">Scan to view</span>
+                          <span className="text-[8px] text-slate-400">QR: Mã CCDC</span>
                           <span className="text-[8px] text-slate-400">{new Date().toLocaleDateString('vi-VN')}</span>
                         </div>
                       </div>

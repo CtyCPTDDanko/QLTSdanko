@@ -50,7 +50,7 @@ export const ToolDetail: React.FC = () => {
   const [editForm, setEditForm] = useState<any>({});
   
   // Stock Actions Modal State
-  const [activeStockModal, setActiveStockModal] = useState<'NONE' | 'TRANSFER' | 'ALLOCATE' | 'RECALL' | 'DAMAGE' | 'REPAIR_COMPLETE' | 'LOST' | 'BATCH' | 'ADJUST'>('NONE');
+  const [activeStockModal, setActiveStockModal] = useState<'NONE' | 'TRANSFER' | 'ALLOCATE' | 'RECALL' | 'DAMAGE' | 'REPAIR_COMPLETE' | 'LOST' | 'LOST_FOUND' | 'BATCH' | 'ADJUST'>('NONE');
 
   // Modal Forms State
   const [transferForm, setTransferForm] = useState({ fromLocation: '', toLocation: '', quantity: 1, note: '' });
@@ -59,6 +59,7 @@ export const ToolDetail: React.FC = () => {
   const [damageForm, setDamageForm] = useState({ locationName: '', quantity: 1, canRepair: true, note: '' });
   const [repairCompleteForm, setRepairCompleteForm] = useState({ locationName: '', quantity: 1, actualCost: 0, note: '' });
   const [lostForm, setLostForm] = useState({ locationName: '', quantity: 1, responsibleUser: '', compensationValue: 0, documentNo: '', note: '' });
+  const [lostFoundForm, setLostFoundForm] = useState({ locationName: '', quantity: 1, note: '' });
   const [batchForm, setBatchForm] = useState({ quantity: 1, purchasePrice: 0, purchaseDate: new Date().toISOString().split('T')[0], supplierName: '', locationName: '', note: '' });
   const [adjustForm, setAdjustForm] = useState({ locationName: '', actualQuantity: 0, action: 'ADJUST_STOCK' as 'ADJUST_STOCK' | 'RECORD_LOST', note: '' });
 
@@ -89,13 +90,16 @@ export const ToolDetail: React.FC = () => {
       const firstWithStock = tool.stocks.find((s: any) => s.quantityAvailable > 0)?.locationName || tool.stocks[0].locationName;
       const firstWithUsing = tool.stocks.find((s: any) => s.quantityUsing > 0)?.locationName || tool.stocks[0].locationName;
       const firstWithBroken = tool.stocks.find((s: any) => s.quantityBroken > 0)?.locationName || tool.stocks[0].locationName;
+      const firstWithRepairing = tool.stocks.find((s: any) => s.quantityRepairing > 0)?.locationName || firstWithBroken;
+      const firstWithLost = tool.stocks.find((s: any) => s.quantityLost > 0)?.locationName || tool.stocks[0].locationName;
       
       setTransferForm(prev => ({ ...prev, fromLocation: firstWithStock }));
       setAllocateForm(prev => ({ ...prev, fromLocation: firstWithStock }));
       setRecallForm(prev => ({ ...prev, fromLocation: firstWithUsing, toLocation: firstWithStock }));
       setDamageForm(prev => ({ ...prev, locationName: firstWithStock }));
-      setRepairCompleteForm(prev => ({ ...prev, locationName: firstWithBroken }));
+      setRepairCompleteForm(prev => ({ ...prev, locationName: firstWithRepairing }));
       setLostForm(prev => ({ ...prev, locationName: firstWithStock }));
+      setLostFoundForm(prev => ({ ...prev, locationName: firstWithLost }));
       setBatchForm(prev => ({ ...prev, locationName: firstWithStock }));
       setAdjustForm(prev => ({ ...prev, locationName: firstWithStock, actualQuantity: tool.stocks[0].quantityAvailable }));
     }
@@ -933,6 +937,8 @@ export const ToolDetail: React.FC = () => {
                               { label: 'Cấp phát sử dụng', icon: <User className="h-3.5 w-3.5 text-green-500" />, modal: 'ALLOCATE' as const },
                               { label: 'Thu hồi', icon: <Box className="h-3.5 w-3.5 text-amber-500" />, modal: 'RECALL' as const },
                               { label: 'Báo hỏng/mất', icon: <ShieldAlert className="h-3.5 w-3.5 text-orange-500" />, modal: 'DAMAGE' as const },
+                              ...(totalRepairing > 0 ? [{ label: 'Đã sửa xong', icon: <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />, modal: 'REPAIR_COMPLETE' as const }] : []),
+                              ...(totalLost > 0 ? [{ label: 'Đã tìm lại', icon: <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />, modal: 'LOST_FOUND' as const }] : []),
                               { label: 'Kiểm kê', icon: <ClipboardCheck className="h-3.5 w-3.5 text-slate-500" />, modal: 'ADJUST' as const }
                             ].map(action => (
                               <button
@@ -2462,8 +2468,8 @@ export const ToolDetail: React.FC = () => {
                     value={repairCompleteForm.locationName}
                     onChange={e => setRepairCompleteForm({ ...repairCompleteForm, locationName: e.target.value })}
                   >
-                    {tool.stocks?.filter((s: any) => s.quantityBroken > 0).map((s: any) => (
-                      <option key={s.id} value={s.locationName}>{s.locationName} (Đang sửa: {s.quantityBroken})</option>
+                    {tool.stocks?.filter((s: any) => s.quantityRepairing > 0).map((s: any) => (
+                      <option key={s.id} value={s.locationName}>{s.locationName} (Đang sửa: {s.quantityRepairing})</option>
                     ))}
                   </select>
                 </div>
@@ -2499,6 +2505,43 @@ export const ToolDetail: React.FC = () => {
               <div className="p-4 bg-slate-50 border-t flex justify-end gap-2">
                 <button type="button" onClick={() => setActiveStockModal('NONE')} className="px-4 py-2 border rounded-xl text-xs font-bold bg-white text-slate-700">Hủy</button>
                 <button type="submit" className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-colors">Hoàn tất sửa</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {activeStockModal === 'LOST_FOUND' && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md border shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" /> Xác nhận đã tìm lại CCDC
+              </h3>
+              <button onClick={() => setActiveStockModal('NONE')} className="p-1 text-slate-400 hover:text-slate-700"><X className="h-5 w-5" /></button>
+            </div>
+            <form onSubmit={(e) => handleStockSubmit(e, 'lost-found', lostFoundForm)}>
+              <div className="p-6 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vị trí tìm lại *</label>
+                  <select required className="w-full bg-slate-50 border rounded-xl px-3 py-2.5 text-xs font-semibold" value={lostFoundForm.locationName} onChange={e => setLostFoundForm({ ...lostFoundForm, locationName: e.target.value })}>
+                    {tool.stocks?.filter((s: any) => s.quantityLost > 0).map((s: any) => (
+                      <option key={s.id} value={s.locationName}>{s.locationName} (Đang mất: {s.quantityLost})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Số lượng tìm lại *</label>
+                  <input type="number" min={1} required className="w-full bg-slate-50 border rounded-xl px-3 py-2 text-xs font-semibold" value={lostFoundForm.quantity} onChange={e => setLostFoundForm({ ...lostFoundForm, quantity: Number(e.target.value) || 1 })} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ghi chú</label>
+                  <textarea className="w-full bg-slate-50 border rounded-xl px-3 py-2 text-xs font-semibold h-16" value={lostFoundForm.note} onChange={e => setLostFoundForm({ ...lostFoundForm, note: e.target.value })} />
+                </div>
+              </div>
+              <div className="p-4 bg-slate-50 border-t flex justify-end gap-2">
+                <button type="button" onClick={() => setActiveStockModal('NONE')} className="px-4 py-2 border rounded-xl text-xs font-bold bg-white text-slate-700">Hủy</button>
+                <button type="submit" className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold">Xác nhận tìm lại</button>
               </div>
             </form>
           </div>
