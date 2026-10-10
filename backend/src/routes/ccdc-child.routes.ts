@@ -381,6 +381,16 @@ childRouter.post('/:childId/mark-lost', async (req: any, res) => {
   }
 });
 
+childRouter.post('/:childId/mark-found', async (req: any, res) => {
+  try {
+    const childId = parseInt(req.params.childId, 10);
+    const result = await CCDCChildService.markFound(childId, req.body || {}, actor(req));
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
 childRouter.post('/:childId/liquidate', async (req: any, res) => {
   try {
     const childId = parseInt(req.params.childId, 10);

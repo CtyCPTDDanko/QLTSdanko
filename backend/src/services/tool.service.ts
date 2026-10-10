@@ -1506,6 +1506,19 @@ export class ToolService {
     });
   }
 
+  static async restoreDamagedTool(toolId: number, data: { note?: string }, performedBy: string) {
+    const ticket = await prisma.toolRepairTicket.findFirst({
+      where: { toolId, status: { in: ['DRAFT', 'OPEN', 'IN_PROGRESS', 'PENDING'] } },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (!ticket) throw new Error('Không tìm thấy phiếu sửa chữa đang mở của CCDC này.');
+    return this.completeRepairTicket(ticket.id, {
+      result: 'FIXED',
+      repairAction: 'Đã sửa xong',
+      note: data.note || 'Đã sửa xong, tiếp tục sử dụng bình thường'
+    }, performedBy);
+  }
+
   /**
    * Tool Lost Report
    */
@@ -1568,6 +1581,51 @@ export class ToolService {
       });
 
       return report;
+    });
+  }
+
+  static async findLostTool(toolId: number, data: { note?: string }, performedBy: string) {
+    return await prisma.$transaction(async (tx) => {
+      const tool = await tx.toolEquipment.findUnique({ where: { id: toolId } });
+      if (!tool) throw new Error('CCDC không tồn tại.');
+      if (tool.status !== 'LOST') throw new Error('CCDC hiện không ở trạng thái báo mất.');
+
+      const report = await tx.toolLostReport.findFirst({
+        where: { toolId, status: { in: ['LOST', 'PENDING'] } },
+        orderBy: { createdAt: 'desc' }
+      });
+      if (!report) throw new Error('Không tìm thấy phiếu báo mất đang mở.');
+
+      const restoredStatus = tool.currentUserName ? 'USING' : 'IN_STOCK';
+      await tx.toolLostReport.update({
+        where: { id: report.id },
+        data: {
+          status: 'FOUND',
+          foundDate: new Date(),
+          foundLocation: tool.locationName,
+          conditionWhenFound: 'NORMAL',
+          newStatusAfterFound: restoredStatus,
+          completedAt: new Date(),
+          note: data.note || report.note
+        }
+      });
+      const updated = await tx.toolEquipment.update({ where: { id: toolId }, data: { status: restoredStatus } });
+      await tx.toolHistory.create({
+        data: {
+          toolId,
+          toolCode: tool.toolCode,
+          eventTime: new Date(),
+          actionType: 'FOUND',
+          oldStatus: 'LOST',
+          newStatus: restoredStatus,
+          oldNote: data.note || `Tìm lại CCDC theo phiếu ${report.lostCode}`
+        }
+      });
+      await AuditService.log({
+        entityType: 'TOOL_EQUIPMENT', entityId: toolId, action: 'UPDATE',
+        details: { action: 'FOUND', lostCode: report.lostCode, newStatus: restoredStatus }, performedBy, tx
+      });
+      return updated;
     });
   }
 
@@ -2539,6 +2597,55 @@ export class ToolService {
         performedBy,
         tx
       });
+    });
+  }
+
+  static async findLostStock(data: {
+    toolId: number;
+    quantity: number;
+    locationName: string;
+    note?: string;
+  }, performedBy: string) {
+    return await prisma.$transaction(async (tx) => {
+      const quantity = Number(data.quantity);
+      if (!Number.isInteger(quantity) || quantity <= 0) throw new Error('Số lượng tìm lại phải lớn hơn 0.');
+      const stock = await tx.toolStock.findUnique({
+        where: { toolId_locationName: { toolId: data.toolId, locationName: data.locationName } }
+      });
+      if (!stock || stock.quantityLost < quantity) throw new Error('Số lượng đang mất tại vị trí không đủ.');
+
+      await tx.toolStock.update({
+        where: { id: stock.id },
+        data: { quantityLost: { decrement: quantity }, quantityAvailable: { increment: quantity } }
+      });
+      const report = await tx.toolLostReport.findFirst({
+        where: { toolId: data.toolId, locationName: data.locationName, status: { in: ['LOST', 'PENDING'] } },
+        orderBy: { createdAt: 'desc' }
+      });
+      if (report) {
+        const remaining = Math.max(0, report.quantity - quantity);
+        await tx.toolLostReport.update({
+          where: { id: report.id },
+          data: {
+            quantity: remaining,
+            status: remaining === 0 ? 'FOUND' : report.status,
+            foundDate: new Date(),
+            foundLocation: data.locationName,
+            conditionWhenFound: 'NORMAL',
+            newStatusAfterFound: 'IN_STOCK',
+            completedAt: remaining === 0 ? new Date() : null,
+            note: data.note || report.note
+          }
+        });
+      }
+      const stockTx = await tx.toolStockTransaction.create({
+        data: { toolId: data.toolId, type: 'FOUND', quantity, toLocation: data.locationName, performedBy, note: data.note || 'Đã tìm lại CCDC' }
+      });
+      await AuditService.log({
+        entityType: 'TOOL_EQUIPMENT', entityId: data.toolId, action: 'UPDATE',
+        details: { action: 'FOUND_STOCK', quantity, location: data.locationName }, performedBy, tx
+      });
+      return stockTx;
     });
   }
 

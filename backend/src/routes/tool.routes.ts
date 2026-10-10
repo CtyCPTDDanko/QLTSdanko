@@ -426,6 +426,16 @@ router.post('/repairs/:id/complete', authenticateToken, async (req: any, res) =>
   }
 });
 
+router.post('/:id/repair-complete', authenticateToken, async (req: any, res) => {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    const performedBy = req.user?.fullName || req.user?.username || 'system';
+    res.json(await ToolService.restoreDamagedTool(id, req.body || {}, performedBy));
+  } catch (err: any) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
 // --- LOST ROUTING ---
 router.post('/lost', authenticateToken, async (req: any, res) => {
   try {
@@ -446,6 +456,16 @@ router.get('/lost/list', authenticateToken, async (req, res) => {
     res.json(reports);
   } catch (err: any) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/:id/found', authenticateToken, async (req: any, res) => {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    const performedBy = req.user?.fullName || req.user?.username || 'system';
+    res.json(await ToolService.findLostTool(id, req.body || {}, performedBy));
+  } catch (err: any) {
+    res.status(400).json({ message: err.message });
   }
 });
 
@@ -778,6 +798,16 @@ router.post('/stock/lost', authenticateToken, async (req: any, res) => {
     res.json({ success: true, result });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/stock/lost-found', authenticateToken, async (req: any, res) => {
+  try {
+    const performedBy = req.user?.fullName || req.user?.username || 'system';
+    const result = await ToolService.findLostStock(req.body, performedBy);
+    res.json({ success: true, result });
+  } catch (err: any) {
+    res.status(400).json({ message: err.message });
   }
 });
 
