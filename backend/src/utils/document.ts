@@ -13,8 +13,9 @@ export async function generateDocumentNo(tx: Prisma.TransactionClient, prefix: s
   const dateStr = `${yyyy}${mm}${dd}`;
   const fullPrefix = `${prefix}-${dateStr}`;
 
-  // Find the latest document with this prefix across BOTH tables to ensure global uniqueness
-  const [latestGen, latestHandover] = await Promise.all([
+  // CCDC handover numbers use this generator too. Include their table so the
+  // next sequence does not repeatedly start at 0001.
+  const [latestGen, latestHandover, latestToolHandover] = await Promise.all([
     tx.generatedDocument.findFirst({
       where: { documentNo: { startsWith: fullPrefix } },
       orderBy: { documentNo: 'desc' },
@@ -24,12 +25,20 @@ export async function generateDocumentNo(tx: Prisma.TransactionClient, prefix: s
       where: { documentNo: { startsWith: fullPrefix } },
       orderBy: { documentNo: 'desc' },
       select: { documentNo: true },
+    }),
+    tx.toolHandoverDocument.findFirst({
+      where: { documentNo: { startsWith: fullPrefix } },
+      orderBy: { documentNo: 'desc' },
+      select: { documentNo: true },
     })
   ]);
 
-  const latestDocNo = (latestGen?.documentNo || '') > (latestHandover?.documentNo || '') 
-    ? latestGen?.documentNo 
-    : latestHandover?.documentNo;
+  const documentNumbers = [
+    latestGen?.documentNo,
+    latestHandover?.documentNo,
+    latestToolHandover?.documentNo,
+  ].filter((value): value is string => Boolean(value)).sort();
+  const latestDocNo = documentNumbers[documentNumbers.length - 1];
 
   let nextNumber = 1;
   if (latestDocNo) {

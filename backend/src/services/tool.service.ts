@@ -1140,7 +1140,10 @@ export class ToolService {
     toolIds: number[];
     autoComplete?: boolean;
   }, performedBy: string) {
-    return await prisma.$transaction(async (tx) => {
+    let lastError: any;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        return await prisma.$transaction(async (tx) => {
       const typeCode = data.type === 'HANDOVER' ? 'BBBG-CCDC' : (data.type === 'RECALL' ? 'BBTH-CCDC' : 'BBDC-CCDC');
       const documentNo = await generateDocumentNo(tx, typeCode);
       const normalizedLoc = data.newLocation ? parseAndNormalizeLocation(data.newLocation) : null;
@@ -1271,8 +1274,20 @@ export class ToolService {
         tx
       });
 
-      return document;
-    });
+          return document;
+        });
+      } catch (error: any) {
+        lastError = error;
+        const target = error?.meta?.target;
+        const isDocumentNoConflict = error?.code === 'P2002'
+          && (Array.isArray(target)
+            ? target.includes('documentNo')
+            : String(target || '').includes('documentNo'));
+        if (!isDocumentNoConflict || attempt === 5) throw error;
+        await new Promise(resolve => setTimeout(resolve, attempt * 50));
+      }
+    }
+    throw lastError;
   }
 
   static async completeHandover(id: number, performedBy: string) {
