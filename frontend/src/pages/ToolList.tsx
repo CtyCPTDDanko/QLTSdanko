@@ -30,6 +30,7 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import QRCodeComponent from 'react-qr-code';
+import { AssetLabelPrintModal } from '../components/AssetLabelPrintModal';
 
 const QRCode = (QRCodeComponent as any).default || QRCodeComponent;
 
@@ -2398,7 +2399,25 @@ export const ToolList: React.FC = () => {
       )}
 
       {/* E. IN TEM QR MODAL */}
-      {activeModal === 'PRINT' && (() => {
+      <AssetLabelPrintModal
+        isOpen={activeModal === 'PRINT'}
+        onClose={() => setActiveModal('NONE')}
+        assets={selectedToolsToPrint.map(tool => ({
+          ...tool,
+          id: `ccdc-${tool.id}`,
+          assetCode: tool.toolCode,
+          assetName: tool.toolName,
+          serialNumber: tool.serialNumber || tool.serial || '',
+          level3Name: tool.level3Name || tool.categoryLevel3Name || tool.categoryName || 'CCDC',
+          level4Name: tool.level4Name || tool.categoryLevel4Name || tool.category || tool.groupName || 'CCDC',
+          purchaseDate: tool.purchaseDate,
+          locationName: tool.locationName,
+          companyName: tool.companyName,
+        }))}
+      />
+
+      {/* Legacy CCDC label renderer retained temporarily for rollback safety. */}
+      {false && (() => {
         const labelSizes = [
           { id: 'sm',  label: 'Nhỏ (40×25mm)',  qrSize: 60,  width: '151px', height: '94px',  fontSize: '7px', nameSize: '8px' },
           { id: 'md',  label: 'Vừa (60×40mm)',  qrSize: 90,  width: '227px', height: '151px', fontSize: '9px', nameSize: '10px' },
