@@ -151,6 +151,8 @@ export const ToolList: React.FC = () => {
 
   // Modals States
   const [activeModal, setActiveModal] = useState<'NONE' | 'HANDOVER' | 'DAMAGE' | 'LOST' | 'LIQUIDATION' | 'PRINT' | 'MERGE'>('NONE');
+  const [printLabelSize, setPrintLabelSize] = useState<'sm' | 'md' | 'lg'>('md');
+  const [printCopies, setPrintCopies] = useState(1);
   
   // Modal forms state
   const [handoverForm, setHandoverForm] = useState({
@@ -2402,15 +2404,13 @@ export const ToolList: React.FC = () => {
           { id: 'md',  label: 'Vừa (60×40mm)',  qrSize: 90,  width: '227px', height: '151px', fontSize: '9px', nameSize: '10px' },
           { id: 'lg',  label: 'Lớn (90×60mm)',  qrSize: 130, width: '340px', height: '227px', fontSize: '11px', nameSize: '13px' }
         ];
-        const [labelSize, setLabelSize_] = React.useState<'sm'|'md'|'lg'>('md');
-        const [copies, setCopies_] = React.useState(1);
-        const currentSize = labelSizes.find(s => s.id === labelSize)!;
+        const currentSize = labelSizes.find(s => s.id === printLabelSize)!;
 
         const handlePrint = () => {
           const printItems = selectedToolsToPrint.flatMap(tool => {
             // Match asset labels: QR contains the business code itself, so it
             // also works with scanners and inventory input without a web URL.
-            return Array(copies).fill({ tool, value: tool.toolCode });
+            return Array(printCopies).fill({ tool, value: tool.toolCode });
           });
 
           const printWindow = window.open('', '_blank', 'width=900,height=700');
@@ -2531,8 +2531,8 @@ export const ToolList: React.FC = () => {
                       {labelSizes.map(s => (
                         <button
                           key={s.id}
-                          onClick={() => setLabelSize_(s.id as any)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${labelSize === s.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}
+                          onClick={() => setPrintLabelSize(s.id as 'sm' | 'md' | 'lg')}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${printLabelSize === s.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}
                         >
                           {s.label}
                         </button>
@@ -2542,14 +2542,14 @@ export const ToolList: React.FC = () => {
                   <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Số bản sao / tem</label>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => setCopies_(Math.max(1, copies - 1))} className="w-7 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 font-bold text-slate-700">−</button>
-                      <span className="text-sm font-black text-slate-800 w-6 text-center">{copies}</span>
-                      <button onClick={() => setCopies_(Math.min(10, copies + 1))} className="w-7 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 font-bold text-slate-700">+</button>
+                      <button onClick={() => setPrintCopies(Math.max(1, printCopies - 1))} className="w-7 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 font-bold text-slate-700">−</button>
+                      <span className="text-sm font-black text-slate-800 w-6 text-center">{printCopies}</span>
+                      <button onClick={() => setPrintCopies(Math.min(10, printCopies + 1))} className="w-7 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 font-bold text-slate-700">+</button>
                     </div>
                   </div>
                   <div className="ml-auto text-right">
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tổng tem sẽ in</div>
-                    <div className="text-xl font-black text-indigo-600">{selectedToolsToPrint.length * copies}</div>
+                    <div className="text-xl font-black text-indigo-600">{selectedToolsToPrint.length * printCopies}</div>
                   </div>
                 </div>
               </div>
@@ -2595,7 +2595,7 @@ export const ToolList: React.FC = () => {
               {/* Footer actions */}
               <div className="p-5 border-t border-slate-100 flex justify-between items-center bg-white shrink-0">
                 <div>
-                  <span className="text-xs text-slate-500 font-bold block">{selectedToolsToPrint.length} CCDC × {copies} bản = <strong className="text-indigo-600">{selectedToolsToPrint.length * copies} tem</strong></span>
+                  <span className="text-xs text-slate-500 font-bold block">{selectedToolsToPrint.length} CCDC × {printCopies} bản = <strong className="text-indigo-600">{selectedToolsToPrint.length * printCopies} tem</strong></span>
                   <span className="text-[10px] text-slate-400">Sẽ mở cửa sổ in mới với bố cục tem tối ưu</span>
                 </div>
                 <div className="flex gap-2">
