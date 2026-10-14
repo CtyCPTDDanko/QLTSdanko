@@ -456,6 +456,7 @@ router.get('/filter-options/users', authenticateToken, async (req, res) => {
     },
     select: { currentUserName: true },
     distinct: ['currentUserName'],
+    orderBy: { currentUserName: 'asc' },
     take: Number(limit)
   });
   res.json(users.map(u => u.currentUserName).filter(Boolean));
@@ -479,7 +480,7 @@ router.get('/filter-options/lv4', authenticateToken, async (req, res) => {
 });
 
 router.get('/filter-options/departments', authenticateToken, async (req, res) => {
-  const { q = '' } = req.query;
+  const { q = '', limit = '1000' } = req.query;
   const depts = await prisma.asset.findMany({
     where: { 
       departmentName: { contains: String(q), mode: 'insensitive' },
@@ -487,13 +488,14 @@ router.get('/filter-options/departments', authenticateToken, async (req, res) =>
     },
     select: { departmentName: true },
     distinct: ['departmentName'],
-    take: 10
+    orderBy: { departmentName: 'asc' },
+    take: Math.min(Math.max(Number(limit) || 1000, 1), 1000)
   });
   res.json(depts.map(d => d.departmentName).filter(Boolean));
 });
 
 router.get('/filter-options/locations', authenticateToken, async (req, res) => {
-  const { q = '' } = req.query;
+  const { q = '', limit = '1000' } = req.query;
   const locs = await prisma.asset.findMany({
     where: {
       locationName: { contains: String(q), mode: 'insensitive' },
@@ -501,13 +503,14 @@ router.get('/filter-options/locations', authenticateToken, async (req, res) => {
     },
     select: { locationName: true },
     distinct: ['locationName'],
-    take: 10
+    orderBy: { locationName: 'asc' },
+    take: Math.min(Math.max(Number(limit) || 1000, 1), 1000)
   });
   res.json(locs.map(l => l.locationName).filter(Boolean));
 });
 
 router.get('/filter-options/cities', authenticateToken, async (req, res) => {
-  const { q = '' } = req.query;
+  const { q = '', limit = '1000' } = req.query;
   const cities = await prisma.asset.findMany({
     where: { 
       cityName: { contains: String(q), mode: 'insensitive' },
@@ -515,13 +518,14 @@ router.get('/filter-options/cities', authenticateToken, async (req, res) => {
     },
     select: { cityName: true },
     distinct: ['cityName'],
-    take: 10
+    orderBy: { cityName: 'asc' },
+    take: Math.min(Math.max(Number(limit) || 1000, 1), 1000)
   });
   res.json(cities.map(c => c.cityName).filter(Boolean));
 });
 
 router.get('/filter-options/projects', authenticateToken, async (req, res) => {
-  const { q = '' } = req.query;
+  const { q = '', limit = '1000' } = req.query;
   const projects = await prisma.asset.findMany({
     where: { 
       projectName: { contains: String(q), mode: 'insensitive' },
@@ -529,7 +533,8 @@ router.get('/filter-options/projects', authenticateToken, async (req, res) => {
     },
     select: { projectName: true },
     distinct: ['projectName'],
-    take: 10
+    orderBy: { projectName: 'asc' },
+    take: Math.min(Math.max(Number(limit) || 1000, 1), 1000)
   });
   res.json(projects.map(p => p.projectName).filter(Boolean));
 });
