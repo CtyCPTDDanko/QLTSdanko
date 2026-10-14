@@ -13,9 +13,23 @@ export async function generateDocumentNo(tx: Prisma.TransactionClient, prefix: s
   const dateStr = `${yyyy}${mm}${dd}`;
   const fullPrefix = `${prefix}-${dateStr}`;
 
-  // CCDC handover numbers use this generator too. Include their table so the
-  // next sequence does not repeatedly start at 0001.
-  const [latestGen, latestHandover, latestToolHandover] = await Promise.all([
+  // Serialize number allocation per prefix inside PostgreSQL. Without this,
+  // two concurrent transactions can both read the same latest number and
+  // then collide on a unique business-code constraint.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${fullPrefix}))`;
+
+  // This generator is shared by documents and all CCDC workflows. Every table
+  // containing a generated unique code must participate in the sequence scan.
+  const [
+    latestGen,
+    latestHandover,
+    latestToolHandover,
+    latestToolRepair,
+    latestToolLost,
+    latestToolLiquidation,
+    latestToolInventory,
+    latestToolDamage,
+  ] = await Promise.all([
     tx.generatedDocument.findFirst({
       where: { documentNo: { startsWith: fullPrefix } },
       orderBy: { documentNo: 'desc' },
@@ -30,13 +44,43 @@ export async function generateDocumentNo(tx: Prisma.TransactionClient, prefix: s
       where: { documentNo: { startsWith: fullPrefix } },
       orderBy: { documentNo: 'desc' },
       select: { documentNo: true },
-    })
+    }),
+    tx.toolRepairTicket.findFirst({
+      where: { repairCode: { startsWith: fullPrefix } },
+      orderBy: { repairCode: 'desc' },
+      select: { repairCode: true },
+    }),
+    tx.toolLostReport.findFirst({
+      where: { lostCode: { startsWith: fullPrefix } },
+      orderBy: { lostCode: 'desc' },
+      select: { lostCode: true },
+    }),
+    tx.toolLiquidationRecord.findFirst({
+      where: { liquidationCode: { startsWith: fullPrefix } },
+      orderBy: { liquidationCode: 'desc' },
+      select: { liquidationCode: true },
+    }),
+    tx.toolInventoryCheck.findFirst({
+      where: { inventoryCode: { startsWith: fullPrefix } },
+      orderBy: { inventoryCode: 'desc' },
+      select: { inventoryCode: true },
+    }),
+    tx.toolDamageReport.findFirst({
+      where: { reportCode: { startsWith: fullPrefix } },
+      orderBy: { reportCode: 'desc' },
+      select: { reportCode: true },
+    }),
   ]);
 
   const documentNumbers = [
     latestGen?.documentNo,
     latestHandover?.documentNo,
     latestToolHandover?.documentNo,
+    latestToolRepair?.repairCode,
+    latestToolLost?.lostCode,
+    latestToolLiquidation?.liquidationCode,
+    latestToolInventory?.inventoryCode,
+    latestToolDamage?.reportCode,
   ].filter((value): value is string => Boolean(value)).sort();
   const latestDocNo = documentNumbers[documentNumbers.length - 1];
 
