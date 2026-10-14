@@ -161,7 +161,15 @@ export class PdfUtil {
 
     // Build Header columns
     const headerColumns: any[] = [];
-    if (headerSettings.showLogo !== false) {
+    if (isToolDocument) {
+      headerColumns.push({
+        stack: [
+          { text: nfc('CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM'), style: 'nationalHeader', alignment: 'center' },
+          { text: nfc('Độc lập - Tự do - Hạnh phúc'), style: 'nationalMotto', alignment: 'center' }
+        ],
+        width: '*'
+      });
+    } else if (headerSettings.showLogo !== false) {
       headerColumns.push({
         stack: [
           { text: nfc(headerSettings.companyName) || 'DANKO GROUP', style: 'companyHeader' },
@@ -460,6 +468,8 @@ export class PdfUtil {
       styles: {
         companyHeader: { fontSize: 10, bold: true, color: '#0f172a' },
         departmentHeader: { fontSize: 8, bold: true, color: '#475569' },
+        nationalHeader: { fontSize: 9, bold: true, color: '#0f172a' },
+        nationalMotto: { fontSize: 8, bold: true, color: '#0f172a', decoration: 'underline', margin: [0, 3, 0, 0] },
         templateCodeHeader: { fontSize: 9, bold: true, italics: true, color: '#334155' },
         documentTitle: { fontSize: 14, bold: true, color: '#0f172a' },
         documentSubNo: { fontSize: 10, bold: true, italics: true, color: '#334155' },
