@@ -884,6 +884,10 @@ export class ToolService {
       where: { id },
       include: {
         assignments: { orderBy: { createdAt: 'desc' } },
+        handoverItems: {
+          include: { handoverDocument: true },
+          orderBy: { id: 'desc' }
+        },
         repairTickets: { orderBy: { createdAt: 'desc' } },
         damageReports: { include: { damageReport: true } },
         lostReports: { orderBy: { createdAt: 'desc' } },
