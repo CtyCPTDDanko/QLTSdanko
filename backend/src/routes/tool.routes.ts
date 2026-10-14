@@ -8,6 +8,7 @@ import { ToolInvoiceParserService } from '../services/tool-invoice-parser.servic
 import { ToolInvoicePostService } from '../services/tool-invoice-post.service';
 import * as path from 'path';
 import * as fs from 'fs';
+import { PdfUtil } from '../utils/pdf.util';
 
 const upload = multer({ storage: multer.memoryStorage() });
 const router = Router();
@@ -329,6 +330,50 @@ router.get('/handover/list', authenticateToken, async (req, res) => {
     res.json(docs);
   } catch (err: any) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// Print CCDC handover using the same configured BM02/PDF layout as assets.
+router.get('/handover/:id/pdf', authenticateToken, async (req: any, res) => {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) return res.status(400).json({ message: 'ID biên bản không hợp lệ.' });
+
+    const document = await prisma.toolHandoverDocument.findUnique({
+      where: { id },
+      include: { items: true }
+    });
+    if (!document) return res.status(404).json({ message: 'Biên bản CCDC không tồn tại.' });
+
+    const moduleKey = document.type === 'RECALL'
+      ? 'RECALL'
+      : document.type === 'TRANSFER'
+        ? 'TRANSFER'
+        : 'HANDOVER';
+    const defaultTemplate = await prisma.template.findFirst({
+      where: { module: moduleKey, isDefault: true, status: 'ACTIVE' }
+    });
+
+    let templateOptions: any = { itemKind: 'TOOL', templateCode: 'BM02/QLTS' };
+    if (defaultTemplate) {
+      try {
+        templateOptions = {
+          itemKind: 'TOOL',
+          configJson: JSON.parse(defaultTemplate.configJson),
+          templateName: defaultTemplate.name,
+          templateCode: defaultTemplate.code
+        };
+      } catch (templateError) {
+        console.error('Không thể đọc cấu hình mẫu biên bản CCDC, dùng mẫu mặc định:', templateError);
+      }
+    }
+
+    const pdfBuffer = await PdfUtil.generateHandoverPdf(document, templateOptions);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=BB_CCDC_${document.documentNo.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
+    res.send(pdfBuffer);
+  } catch (err: any) {
+    res.status(500).json({ message: err.message || 'Không thể tạo PDF biên bản CCDC.' });
   }
 });
 

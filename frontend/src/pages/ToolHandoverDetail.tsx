@@ -151,7 +151,12 @@ export const ToolHandoverDetail: React.FC = () => {
   };
 
   const handlePrint = () => {
-    window.print();
+    const token = localStorage.getItem('token') || '';
+    const printUrl = `${api.defaults.baseURL}/tools/handover/${id}/pdf?token=${encodeURIComponent(token)}`;
+    const printWindow = window.open(printUrl, '_blank');
+    if (!printWindow) {
+      toast.error('Trình duyệt đã chặn cửa sổ in. Vui lòng cho phép popup.');
+    }
   };
 
   if (loading) {
