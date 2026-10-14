@@ -81,13 +81,15 @@ pdfmake.setFonts(fonts);
 export class PdfUtil {
   static async generateHandoverPdf(
     document: any, 
-    options: { configJson?: any, templateName?: string, templateCode?: string } = {}
+    options: { configJson?: any, templateName?: string, templateCode?: string, itemKind?: 'ASSET' | 'TOOL' } = {}
   ): Promise<Buffer> {
-    const assetIds = document.items.map((i: any) => i.assetId);
-    const assets = await prisma.asset.findMany({
-      where: { id: { in: assetIds } }
-    });
-    const assetMap = new Map(assets.map(a => [a.id, a]));
+    const isToolDocument = options.itemKind === 'TOOL';
+    const itemIds = document.items.map((item: any) => isToolDocument ? item.toolId : item.assetId);
+    const records: any[] = isToolDocument
+      ? await prisma.toolEquipment.findMany({ where: { id: { in: itemIds } } })
+      : await prisma.asset.findMany({ where: { id: { in: itemIds } } });
+    const recordMap = new Map(records.map(record => [record.id, record]));
+    const itemNoun = isToolDocument ? 'CCDC' : 'tài sản';
 
     const docDate = document.confirmedAt ? new Date(document.confirmedAt) : new Date(document.createdAt);
     const day = docDate.getDate().toString().padStart(2, '0');
@@ -98,17 +100,20 @@ export class PdfUtil {
     const city = nfc(document.newCity) || 'Hà Nội';
     const isAreaRecipient = document.recipientType === 'AREA';
 
-    let titleText = nfc(options.templateName) || 'BIÊN BẢN BÀN GIAO TÀI SẢN';
+    let titleText = nfc(options.templateName) || `BIÊN BẢN BÀN GIAO ${isToolDocument ? 'CÔNG CỤ DỤNG CỤ' : 'TÀI SẢN'}`;
+    if (isToolDocument && options.templateName) {
+      titleText = titleText.replace(/TÀI SẢN/gi, 'CÔNG CỤ DỤNG CỤ');
+    }
     let senderRoleLabel = 'Đại diện bên giao';
     let recipientRoleLabel = 'Đại diện bên nhận';
 
     if (!options.templateName) {
       if (document.type === 'TRANSFER') {
-        titleText = 'BIÊN BẢN ĐIỀU CHUYỂN TÀI SẢN';
+        titleText = `BIÊN BẢN ĐIỀU CHUYỂN ${isToolDocument ? 'CÔNG CỤ DỤNG CỤ' : 'TÀI SẢN'}`;
       } else if (document.type === 'LOCATION_TRANSFER') {
-        titleText = 'BIÊN BẢN ĐIỀU CHUYỂN VỊ TRÍ TÀI SẢN';
+        titleText = `BIÊN BẢN ĐIỀU CHUYỂN VỊ TRÍ ${isToolDocument ? 'CÔNG CỤ DỤNG CỤ' : 'TÀI SẢN'}`;
       } else if (document.type === 'RECALL') {
-        titleText = 'BIÊN BẢN THU HỒI TÀI SẢN';
+        titleText = `BIÊN BẢN THU HỒI ${isToolDocument ? 'CÔNG CỤ DỤNG CỤ' : 'TÀI SẢN'}`;
         senderRoleLabel = 'Đại diện bên bàn giao';
         recipientRoleLabel = 'Đại diện đơn vị thu hồi';
       }
@@ -243,15 +248,15 @@ export class PdfUtil {
         style: 'normalText',
         margin: [0, 2, 0, 15]
       },
-      { text: nfc('Cùng giao/nhận tài sản như sau:'), style: 'normalTextBold', margin: [0, 0, 0, 8] }
+      { text: nfc(`Cùng giao/nhận ${itemNoun} như sau:`), style: 'normalTextBold', margin: [0, 0, 0, 8] }
     ];
 
     // Build Asset Table Columns dynamically
     const COLUMN_HEADERS: Record<string, any> = {
       index: { text: 'STT', style: 'tableHeader', alignment: 'center' },
-      assetCode: { text: nfc('Mã tài sản'), style: 'tableHeader', alignment: 'center' },
-      assetCodeQr: { text: nfc('Mã tài sản / QR'), style: 'tableHeader', alignment: 'center' },
-      assetName: { text: nfc('Tên tài sản'), style: 'tableHeader' },
+      assetCode: { text: nfc(isToolDocument ? 'Mã CCDC' : 'Mã tài sản'), style: 'tableHeader', alignment: 'center' },
+      assetCodeQr: { text: nfc(isToolDocument ? 'Mã CCDC / QR' : 'Mã tài sản / QR'), style: 'tableHeader', alignment: 'center' },
+      assetName: { text: nfc(isToolDocument ? 'Tên CCDC' : 'Tên tài sản'), style: 'tableHeader' },
       specification: { text: nfc('Mô tả kỹ thuật'), style: 'tableHeader' },
       serial: { text: 'Serial', style: 'tableHeader' },
       unit: { text: nfc('ĐVT'), style: 'tableHeader', alignment: 'center' },
@@ -284,11 +289,13 @@ export class PdfUtil {
     const qrSize = tableSettings.assetQrSize !== undefined ? Number(tableSettings.assetQrSize) : 48;
 
     const bodyRows = document.items.map((item: any, index: number) => {
-      const asset = assetMap.get(item.assetId);
-      const spec = nfc(asset?.usagePurpose || asset?.level4Name) || '---';
-      const serial = nfc(asset?.serialNumber) || '---';
-      const cond = asset?.status === 'ASSIGNED' ? nfc('Đang sử dụng') : (asset?.status === 'IN_STOCK' ? nfc('Trong kho') : (asset?.status === 'LOST' ? nfc('Mất') : nfc('Bình thường')));
-      const price = asset?.purchasePriceExVat ? asset.purchasePriceExVat.toLocaleString() : '---';
+      const record: any = recordMap.get(isToolDocument ? item.toolId : item.assetId);
+      const spec = nfc(isToolDocument ? (record?.category || record?.initialCondition) : (record?.usagePurpose || record?.level4Name)) || '---';
+      const serial = nfc(record?.serialNumber) || '---';
+      const isUsing = ['ASSIGNED', 'USING'].includes(record?.status);
+      const cond = isUsing ? nfc('Đang sử dụng') : (record?.status === 'IN_STOCK' ? nfc('Trong kho') : (record?.status === 'LOST' ? nfc('Mất') : nfc(record?.initialCondition) || nfc('Bình thường')));
+      const rawPrice = isToolDocument ? record?.purchasePrice : record?.purchasePriceExVat;
+      const price = rawPrice ? rawPrice.toLocaleString() : '---';
 
       const vMargin = showQrInTable && activeColumns.includes('assetCodeQr') ? [0, 15, 0, 5] : [0, 4, 0, 4];
 
@@ -314,11 +321,11 @@ export class PdfUtil {
           case 'unit':
             return { text: nfc(item.unit) || nfc('Cái'), style: 'tableCell', alignment: 'center', margin: vMargin };
           case 'quantity':
-            return { text: '1', style: 'tableCell', alignment: 'center', margin: vMargin };
+            return { text: String(isToolDocument ? (record?.quantity || 1) : 1), style: 'tableCell', alignment: 'center', margin: vMargin };
           case 'condition':
             return { text: nfc(cond), style: 'tableCell', margin: vMargin };
           case 'note':
-            return { text: nfc(asset?.documentNote) || '---', style: 'tableCell', margin: vMargin };
+            return { text: nfc(isToolDocument ? record?.note : record?.documentNote) || '---', style: 'tableCell', margin: vMargin };
           case 'purchasePriceExVat':
             return { text: price, style: 'tableCell', alignment: 'right', margin: vMargin };
           default:
@@ -355,8 +362,8 @@ export class PdfUtil {
     // Commitments / Terms
     if (config.includeCommitment !== false) {
       let commitmentContent = [
-        'Bên nhận đã kiểm tra đúng chủng loại, số lượng, tình trạng tài sản nêu trên và có trách nhiệm quản lý, sử dụng tài sản đúng mục đích công việc.',
-        'Hệ thống/cá nhân quản lý tài sản cập nhật trạng thái tài sản theo biên bản này sau khi các bên xác nhận.'
+        `Bên nhận đã kiểm tra đúng chủng loại, số lượng, tình trạng ${itemNoun} nêu trên và có trách nhiệm quản lý, sử dụng ${itemNoun} đúng mục đích công việc.`,
+        `Hệ thống/cá nhân quản lý ${itemNoun} cập nhật trạng thái ${itemNoun} theo biên bản này sau khi các bên xác nhận.`
       ];
       if (config.commitmentText) {
         if (typeof config.commitmentText === 'string') {
