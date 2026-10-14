@@ -162,6 +162,15 @@ export const AssetList: React.FC = () => {
     level4Code: '',
     currentUserName: ''
   });
+  const [reportOptions, setReportOptions] = useState<{
+    companies: Array<{ value: string; label: string }>;
+    departments: string[];
+    cities: string[];
+    projects: string[];
+    locations: string[];
+    users: string[];
+  }>({ companies: [], departments: [], cities: [], projects: [], locations: [], users: [] });
+  const [reportOptionsLoading, setReportOptionsLoading] = useState(false);
   const [tempPriceMin, setTempPriceMin] = useState('');
   const [tempPriceMax, setTempPriceMax] = useState('');
   const [tempPurchaseFrom, setTempPurchaseFrom] = useState('');
@@ -188,6 +197,42 @@ export const AssetList: React.FC = () => {
     };
     fetchLv4Categories();
   }, []);
+
+  useEffect(() => {
+    if (!isAssetReportOpen) return;
+
+    let cancelled = false;
+    const loadReportOptions = async () => {
+      setReportOptionsLoading(true);
+      try {
+        const [companies, departments, cities, projects, locations, users] = await Promise.all([
+          api.get('/assets/filter-options/companies'),
+          api.get('/assets/filter-options/departments', { params: { q: '', limit: 1000 } }),
+          api.get('/assets/filter-options/cities', { params: { q: '', limit: 1000 } }),
+          api.get('/assets/filter-options/projects', { params: { q: '', limit: 1000 } }),
+          api.get('/assets/filter-options/locations', { params: { q: '', limit: 1000 } }),
+          api.get('/assets/filter-options/users', { params: { q: '', limit: 1000 } }),
+        ]);
+        if (!cancelled) {
+          setReportOptions({
+            companies: companies.data || [],
+            departments: departments.data || [],
+            cities: cities.data || [],
+            projects: projects.data || [],
+            locations: locations.data || [],
+            users: users.data || [],
+          });
+        }
+      } catch (err) {
+        console.error('Không thể tải danh sách bộ lọc báo cáo', err);
+        if (!cancelled) toast.error('Không thể tải danh sách bộ lọc báo cáo.');
+      } finally {
+        if (!cancelled) setReportOptionsLoading(false);
+      }
+    };
+    loadReportOptions();
+    return () => { cancelled = true; };
+  }, [isAssetReportOpen]);
 
   useEffect(() => {
     if (filters.invoiceBatchId) {
@@ -3506,27 +3551,47 @@ export const AssetList: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mã công ty</label>
-                  <input value={reportForm.companyCode} onChange={(e) => setReportForm({ ...reportForm, companyCode: e.target.value })} placeholder="Toàn tập đoàn" className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold" />
+                  <select value={reportForm.companyCode} onChange={(e) => setReportForm({ ...reportForm, companyCode: e.target.value })} disabled={reportOptionsLoading} className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold bg-white disabled:opacity-60">
+                    <option value="">Toàn tập đoàn</option>
+                    {reportOptions.companies.map((option) => <option key={option.value} value={option.value}>{option.value} - {option.label}</option>)}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ban phòng</label>
-                  <input value={reportForm.departmentName} onChange={(e) => setReportForm({ ...reportForm, departmentName: e.target.value })} placeholder="Tất cả" className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold" />
+                  <select value={reportForm.departmentName} onChange={(e) => setReportForm({ ...reportForm, departmentName: e.target.value })} disabled={reportOptionsLoading} className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold bg-white disabled:opacity-60">
+                    <option value="">Tất cả</option>
+                    {reportOptions.departments.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Thành phố</label>
-                  <input value={reportForm.cityName} onChange={(e) => setReportForm({ ...reportForm, cityName: e.target.value })} placeholder="Tất cả" className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold" />
+                  <select value={reportForm.cityName} onChange={(e) => setReportForm({ ...reportForm, cityName: e.target.value })} disabled={reportOptionsLoading} className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold bg-white disabled:opacity-60">
+                    <option value="">Tất cả</option>
+                    {reportOptions.cities.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dự án</label>
-                  <input value={reportForm.projectName} onChange={(e) => setReportForm({ ...reportForm, projectName: e.target.value })} placeholder="Tất cả" className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold" />
+                  <select value={reportForm.projectName} onChange={(e) => setReportForm({ ...reportForm, projectName: e.target.value })} disabled={reportOptionsLoading} className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold bg-white disabled:opacity-60">
+                    <option value="">Tất cả</option>
+                    {reportOptions.projects.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vị trí / tầng / khu vực</label>
-                  <input value={reportForm.locationQuery} onChange={(e) => setReportForm({ ...reportForm, locationQuery: e.target.value })} placeholder="Tất cả" className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold" />
+                  <select value={reportForm.locationQuery} onChange={(e) => setReportForm({ ...reportForm, locationQuery: e.target.value })} disabled={reportOptionsLoading} className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold bg-white disabled:opacity-60">
+                    <option value="">Tất cả</option>
+                    {reportOptions.locations.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nhóm tài sản</label>
-                  <input value={reportForm.level4Code} onChange={(e) => setReportForm({ ...reportForm, level4Code: e.target.value })} placeholder="Mã nhóm LV4 hoặc để trống" className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold" />
+                  <select value={reportForm.level4Code} onChange={(e) => setReportForm({ ...reportForm, level4Code: e.target.value })} className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold bg-white">
+                    <option value="">Tất cả</option>
+                    {lv4Categories.slice().sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'vi')).map((category: any) => (
+                      <option key={category.id || category.code} value={category.code}>{category.code} - {category.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trạng thái</label>
@@ -3542,7 +3607,10 @@ export const AssetList: React.FC = () => {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Người sử dụng</label>
-                  <input value={reportForm.currentUserName} onChange={(e) => setReportForm({ ...reportForm, currentUserName: e.target.value })} placeholder="Tất cả" className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold" />
+                  <select value={reportForm.currentUserName} onChange={(e) => setReportForm({ ...reportForm, currentUserName: e.target.value })} disabled={reportOptionsLoading} className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm font-semibold bg-white disabled:opacity-60">
+                    <option value="">Tất cả</option>
+                    {reportOptions.users.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
                 </div>
               </div>
 
