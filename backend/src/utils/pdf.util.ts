@@ -290,6 +290,8 @@ export class PdfUtil {
 
     const bodyRows = document.items.map((item: any, index: number) => {
       const record: any = recordMap.get(isToolDocument ? item.toolId : item.assetId);
+      const itemCode = nfc(isToolDocument ? item.toolCode : item.assetCode) || '---';
+      const itemName = nfc(isToolDocument ? item.toolName : item.assetName) || '---';
       const spec = nfc(isToolDocument ? (record?.category || record?.initialCondition) : (record?.usagePurpose || record?.level4Name)) || '---';
       const serial = nfc(record?.serialNumber) || '---';
       const isUsing = ['ASSIGNED', 'USING'].includes(record?.status);
@@ -304,16 +306,16 @@ export class PdfUtil {
           case 'index':
             return { text: (index + 1).toString(), style: 'tableCell', alignment: 'center', margin: vMargin };
           case 'assetCode':
-            return { text: item.assetCode, style: 'tableCellCode', alignment: 'center', margin: vMargin };
+            return { text: itemCode, style: 'tableCellCode', alignment: 'center', margin: vMargin };
           case 'assetCodeQr':
             return {
               stack: [
-                { text: item.assetCode, style: 'tableCellCode', alignment: 'center' },
-                ...(showQrInTable ? [{ qr: item.assetCode, fit: qrSize, alignment: 'center', margin: [0, 4, 0, 4] }] : [])
+                { text: itemCode, style: 'tableCellCode', alignment: 'center' },
+                ...(showQrInTable && itemCode !== '---' ? [{ qr: itemCode, fit: qrSize, alignment: 'center', margin: [0, 4, 0, 4] }] : [])
               ]
             };
           case 'assetName':
-            return { text: nfc(item.assetName), style: 'tableCell', margin: vMargin };
+            return { text: itemName, style: 'tableCell', margin: vMargin };
           case 'specification':
             return { text: nfc(spec), style: 'tableCell', margin: vMargin };
           case 'serial':
