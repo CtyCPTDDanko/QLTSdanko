@@ -2737,6 +2737,20 @@ export const AssetList: React.FC = () => {
               >
                 <UserPlus className="mr-2 h-4 w-4" /> Bàn giao / Điều chuyển
               </button>
+              <button
+                onClick={() => {
+                  openModal("TRANSFER_WIZARD", {
+                    initialAssetIds: selectedIds,
+                    defaultType: 'LOCATION_TRANSFER',
+                    source: 'ASSET_DETAIL',
+                    onComplete: () => { clearSelection(); refreshAssetData(); }
+                  });
+                }}
+                className="h-11 flex items-center px-3 hover:bg-[#1E293B] rounded-lg text-xs font-bold text-sky-300 transition-colors whitespace-nowrap"
+                title={`Sửa vị trí cho ${selectedIds.length} tài sản đang chọn`}
+              >
+                <MapPin className="mr-2 h-4 w-4" /> Sửa vị trí
+              </button>
               <button 
                 onClick={() => {
                   openModal("INVENTORY_WIZARD", {
