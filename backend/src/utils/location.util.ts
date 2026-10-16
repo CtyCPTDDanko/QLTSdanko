@@ -14,6 +14,26 @@ export function parseAndNormalizeLocation(location: string | null | undefined): 
 
   const trimmed = normalizeAssetLocation(location);
 
+  // Preserve every selected level for structured locations before applying the
+  // legacy shorthand rules below. Those rules intentionally collapse values
+  // such as "Mặt trước C6-I", but must not discard the place/floor/detail
+  // levels appended by the location picker.
+  const structuredParts = trimmed
+    .split(/\s+(?:-|\/)\s+/)
+    .map(part => part.trim())
+    .filter(Boolean);
+  if (structuredParts.length > 3) {
+    const city = structuredParts[0];
+    const project = normalizeProjectName(structuredParts[1]);
+    const detail = structuredParts.slice(2).join(' / ');
+    return {
+      city,
+      project,
+      location: detail,
+      fullFormatted: `${city} - ${project} - ${detail}`
+    };
+  }
+
   // Strip accents and clean up spaces/dashes for mapping checks
   const lower = trimmed.toLowerCase();
   const cleanStr = stripAccents(lower)
@@ -68,7 +88,7 @@ export function parseAndNormalizeLocation(location: string | null | undefined): 
   }
 
   // Parsing formats like "City - Project - Location" or "City / Project / Location" or "City-Project-Location"
-  const parts = trimmed.split(/\s+(?:-|\/)\s+/).map(p => p.trim());
+  const parts = structuredParts;
   if (parts.length >= 3) {
     const city = parts[0];
     const project = parts[1];
