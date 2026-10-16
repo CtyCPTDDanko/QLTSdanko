@@ -3,7 +3,7 @@ import {
   X, Check, Search, Plus, Trash2, Package, MapPin, 
   User, Building, ShieldAlert, ChevronLeft, ChevronRight, 
   Printer, Save, CheckCircle2, History, AlertTriangle,
-  ArrowRightLeft, RotateCcw, ChevronDown
+  ArrowRightLeft, RotateCcw, ChevronDown, Edit3
 } from 'lucide-react';
 import api from '../lib/api';
 import { toast } from 'react-toastify';
@@ -710,6 +710,7 @@ export const TransferWizard: React.FC<TransferWizardProps> = ({
     note: '',
     agreedToCommitment: false
   });
+  const [isRecipientAreaEditing, setIsRecipientAreaEditing] = useState(false);
 
   // Dependent Location states
   const [selectedCity, setSelectedCity] = useState('');
@@ -852,7 +853,9 @@ export const TransferWizard: React.FC<TransferWizardProps> = ({
       ...prev,
       newCity: resolved.city,
       newLocation: resolved.location,
-      recipientArea: prev.recipientType === 'AREA' && resolved.location ? resolved.location : prev.recipientArea
+      recipientArea: prev.recipientType === 'AREA' && resolved.location && !isRecipientAreaEditing
+        ? resolved.location
+        : prev.recipientArea
     }));
   }, [selectedCity, selectedProject, selectedLocation, customCity, customProject, customLocation]);
 
@@ -1058,6 +1061,7 @@ export const TransferWizard: React.FC<TransferWizardProps> = ({
     setWizardAssets([]);
     setRecipientSearch('');
     setRecipientOptionsOpen(false);
+    setIsRecipientAreaEditing(false);
     setWizardForm({
       recipientName: '',
       recipientType: 'PERSON',
@@ -1092,6 +1096,7 @@ export const TransferWizard: React.FC<TransferWizardProps> = ({
 
   const fetchInitialAssets = async (ids: number[]) => {
     setLoadingAssets(true);
+    setIsRecipientAreaEditing(false);
     try {
       const list = await Promise.all(
         ids.map(async (id) => {
@@ -1130,6 +1135,7 @@ export const TransferWizard: React.FC<TransferWizardProps> = ({
 
   const fetchDraftDetails = async (id: number) => {
     setLoadingAssets(true);
+    setIsRecipientAreaEditing(false);
     try {
       const res = await api.get(`/handover/${id}`);
       const detail = res.data;
@@ -1760,13 +1766,16 @@ export const TransferWizard: React.FC<TransferWizardProps> = ({
                                   <button
                                     key={option.value}
                                     type="button"
-                                    onClick={() => setWizardForm((current) => ({
-                                      ...current,
-                                      recipientType: option.value,
-                                      recipientArea: option.value === 'AREA' ? current.recipientArea : '',
-                                      recipientPosition: option.value === 'AREA' ? '' : current.recipientPosition,
-                                      receiverId: option.value === 'AREA' ? null : current.receiverId
-                                    }))}
+                                    onClick={() => {
+                                      setWizardForm((current) => ({
+                                        ...current,
+                                        recipientType: option.value,
+                                        recipientArea: option.value === 'AREA' ? current.recipientArea : '',
+                                        recipientPosition: option.value === 'AREA' ? '' : current.recipientPosition,
+                                        receiverId: option.value === 'AREA' ? null : current.receiverId
+                                      }));
+                                      setIsRecipientAreaEditing(false);
+                                    }}
                                     className={`h-9 rounded-lg inline-flex items-center justify-center gap-1.5 text-[10px] font-black uppercase transition-colors ${
                                       active
                                         ? 'bg-white text-primary-700 shadow-sm'
@@ -1785,20 +1794,41 @@ export const TransferWizard: React.FC<TransferWizardProps> = ({
 
                         {wizardForm.recipientType === 'AREA' && wizardType !== 'RECALL' && (
                           <div className="space-y-1">
-                            <label htmlFor="handover-recipient-area" className="font-bold text-slate-500">
-                              Tên khu vực nhận / nơi đặt tài sản *
-                            </label>
+                            <div className="flex items-center justify-between gap-2">
+                              <label htmlFor="handover-recipient-area" className="font-bold text-slate-500">
+                                Tên khu vực nhận / nơi đặt tài sản *
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setIsRecipientAreaEditing((current) => !current)}
+                                className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-black uppercase transition-colors ${
+                                  isRecipientAreaEditing
+                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                    : 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100'
+                                }`}
+                              >
+                                {isRecipientAreaEditing ? <Check className="h-3.5 w-3.5" /> : <Edit3 className="h-3.5 w-3.5" />}
+                                {isRecipientAreaEditing ? 'Xong' : 'Sửa'}
+                              </button>
+                            </div>
                             <input
                               id="handover-recipient-area"
                               name="recipientArea"
                               type="text"
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white transition-all"
-                              placeholder="Chọn vị trí phân cấp bên phải"
-                              disabled
+                              className={`w-full px-3 py-2 border rounded-xl text-xs font-bold text-slate-800 transition-all ${
+                                isRecipientAreaEditing
+                                  ? 'border-sky-300 bg-white ring-2 ring-sky-100 focus:border-sky-400 focus:outline-none'
+                                  : 'border-slate-200 bg-slate-50'
+                              }`}
+                              placeholder={isRecipientAreaEditing ? 'Nhập tên khu vực muốn hiển thị...' : 'Chọn vị trí phân cấp bên phải'}
+                              readOnly={!isRecipientAreaEditing}
                               value={wizardForm.recipientArea}
+                              onChange={(event) => setWizardForm((current) => ({ ...current, recipientArea: event.target.value }))}
                             />
                             <p className="text-[10px] text-slate-400 font-medium">
-                              Vị trí phân cấp bên phải sẽ được ghi nhận là vị trí hiện tại của tài sản.
+                              {isRecipientAreaEditing
+                                ? 'Tên nhập tay sẽ được dùng để hiển thị; vị trí phân cấp bên phải vẫn là vị trí hiện tại của tài sản.'
+                                : 'Vị trí phân cấp bên phải sẽ được dùng làm tên mặc định. Bấm Sửa để nhập tên hiển thị khác.'}
                             </p>
                           </div>
                         )}
