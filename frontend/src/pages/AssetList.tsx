@@ -513,8 +513,29 @@ export const AssetList: React.FC = () => {
   }, [localSearch, search]);
 
   const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
+  const [assetMenuPlacement, setAssetMenuPlacement] = useState<'up' | 'down'>('down');
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isAssetActionMenuOpen, setIsAssetActionMenuOpen] = useState(false);
+
+  const toggleAssetActionMenu = (event: React.MouseEvent<HTMLButtonElement>, assetId: number) => {
+    event.stopPropagation();
+    if (activeMenuId === assetId) {
+      setActiveMenuId(null);
+      return;
+    }
+
+    const buttonRect = event.currentTarget.getBoundingClientRect();
+    const scrollContainer = event.currentTarget.closest('.overflow-auto');
+    const containerRect = scrollContainer?.getBoundingClientRect();
+    const visibleTop = Math.max(0, containerRect?.top ?? 0);
+    const visibleBottom = Math.min(window.innerHeight, containerRect?.bottom ?? window.innerHeight);
+    const spaceAbove = buttonRect.top - visibleTop;
+    const spaceBelow = visibleBottom - buttonRect.bottom;
+    const desiredMenuHeight = Math.min(480, window.innerHeight * 0.65);
+
+    setAssetMenuPlacement(spaceBelow < desiredMenuHeight && spaceAbove > spaceBelow ? 'up' : 'down');
+    setActiveMenuId(assetId);
+  };
 
   const updateParam = (key: string, value: string | null) => {
     const newParams = new URLSearchParams(searchParams);
@@ -3067,7 +3088,7 @@ export const AssetList: React.FC = () => {
                     <td className="px-3 text-right" onClick={(e) => e.stopPropagation()}>
                        <div className="relative inline-block">
                           <button 
-                            onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === asset.id ? null : asset.id); }}
+                            onClick={(e) => toggleAssetActionMenu(e, asset.id)}
                              className="h-11 w-11 inline-flex items-center justify-center hover:bg-white rounded-xl border border-transparent hover:border-[#E2E8F0] text-[#94A3B8] hover:text-[#0F172A] transition-all shadow-sm"
                           >
                             <MoreVertical className="h-5 w-5" />
@@ -3075,7 +3096,10 @@ export const AssetList: React.FC = () => {
                           {activeMenuId === asset.id && (
                             <>
                               <div className="fixed inset-0 z-30" onClick={() => setActiveMenuId(null)}></div>
-                              <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-[#E2E8F0] z-40 p-2 animate-in fade-in zoom-in duration-150 text-left">
+                              <div className={cn(
+                                "absolute right-0 w-64 max-h-[min(70vh,32rem)] overflow-y-auto overscroll-contain custom-scrollbar bg-white rounded-2xl shadow-2xl border border-[#E2E8F0] z-40 p-2 animate-in fade-in zoom-in duration-150 text-left",
+                                assetMenuPlacement === 'up' ? "bottom-full mb-2 origin-bottom-right" : "top-full mt-2 origin-top-right"
+                              )}>
                                  <Can permission="ASSET_VIEW"><ActionItem label="Xem chi tiết" icon={<Eye className="h-4 w-4" />} onClick={() => handleAssetAction('view', asset)} /></Can>
                                  {asset.status !== 'LIQUIDATED' && asset.status !== 'LOST' && (
                                    <Can permission="TRANSFER_CREATE"><ActionItem label="Điều chuyển vị trí" icon={<MapPin className="h-4 w-4" />} onClick={() => handleAssetAction('location_transfer', asset)} /></Can>
