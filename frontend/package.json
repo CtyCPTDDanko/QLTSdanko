@@ -21,16 +21,16 @@
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.5.0",
     "jsdom": "^29.1.1",
-    "postcss": "^8.5.13",
+    "postcss": "^8.5.31",
     "tailwindcss": "^4.2.4",
     "typescript": "~6.0.2",
-    "vite": "^8.0.10",
-    "vitest": "^4.1.6"
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-table": "^8.21.3",
-    "axios": "^1.16.0",
+    "axios": "^1.20.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "lucide-react": "^1.14.0",
@@ -39,7 +39,7 @@
     "react-dom": "^19.2.5",
     "react-hook-form": "^7.75.0",
     "react-qr-code": "^2.0.21",
-    "react-router-dom": "^7.16.0",
+    "react-router-dom": "^7.18.4",
     "react-toastify": "^11.1.0",
     "tailwind-merge": "^3.5.0",
     "zod": "^4.4.2"
