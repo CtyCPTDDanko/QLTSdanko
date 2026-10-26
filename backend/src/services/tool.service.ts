@@ -2301,6 +2301,9 @@ export class ToolService {
     note?: string;
   }, performedBy: string) {
     return await prisma.$transaction(async (tx) => {
+      const tool = await tx.toolEquipment.findUnique({ where: { id: data.toolId } });
+      if (!tool) throw new Error('Không tìm thấy CCDC.');
+
       const sourceStock = await tx.toolStock.findUnique({
         where: { toolId_locationName: { toolId: data.toolId, locationName: data.fromLocation } }
       });
@@ -2322,7 +2325,7 @@ export class ToolService {
           quantityUsing: { increment: data.quantity }
         }
       });
-      return await tx.toolStockTransaction.create({
+      const stockTransaction = await tx.toolStockTransaction.create({
         data: {
           toolId: data.toolId,
           type: 'USE',
@@ -2333,6 +2336,45 @@ export class ToolService {
           note: data.note || 'Cấp phát sử dụng'
         }
       });
+
+      const documentNo = await generateDocumentNo(tx, 'BBBG-CCDC');
+      const document = await tx.toolHandoverDocument.create({
+        data: {
+          documentNo,
+          type: 'HANDOVER',
+          status: 'COMPLETED',
+          confirmedAt: new Date(),
+          senderName: data.fromLocation,
+          senderDepartment: 'Bộ phận QLTS / Kho',
+          recipientName: data.toLocation,
+          recipientDepartment: 'Địa điểm sử dụng',
+          newLocation: data.toLocation,
+          reason: `Cấp phát ${data.quantity} ${tool.unit || 'Cái'} CCDC`,
+          note: data.note || `Cấp phát từ ${data.fromLocation} đến ${data.toLocation}`,
+          items: {
+            create: {
+              toolId: tool.id,
+              toolCode: tool.toolCode,
+              toolName: tool.toolName,
+              unit: tool.unit,
+              quantity: data.quantity,
+              oldStatus: 'IN_STOCK',
+              newStatus: 'USING'
+            }
+          }
+        }
+      });
+
+      await AuditService.log({
+        entityType: 'HANDOVER',
+        entityId: document.id,
+        action: 'CREATE_AND_COMPLETE' as any,
+        details: { documentNo, type: 'HANDOVER', toolId: tool.id, quantity: data.quantity, from: data.fromLocation, to: data.toLocation, isTool: true },
+        performedBy,
+        tx
+      });
+
+      return { stockTransaction, document };
     });
   }
 
@@ -2351,7 +2393,12 @@ export class ToolService {
       const tool = await tx.toolEquipment.findUnique({ where: { id: data.toolId } });
       if (!tool) throw new Error('Không tìm thấy CCDC.');
 
-      if (data.qtyGood + data.qtyRepair + data.qtyBroken + data.qtyLost !== data.quantity) {
+      const qtyGood = Number(data.qtyGood || 0);
+      const qtyRepair = Number(data.qtyRepair || 0);
+      const qtyBroken = Number(data.qtyBroken || 0);
+      const qtyLost = Number(data.qtyLost || 0);
+
+      if (qtyGood + qtyRepair + qtyBroken + qtyLost !== data.quantity) {
         throw new Error('Tổng số lượng thu hồi chi tiết không khớp tổng số lượng yêu cầu.');
       }
 
@@ -2376,16 +2423,16 @@ export class ToolService {
         create: {
           toolId: data.toolId,
           locationName: data.toLocation,
-          quantityAvailable: data.qtyGood,
-          quantityRepairing: data.qtyRepair,
-          quantityBroken: data.qtyBroken,
-          quantityLost: data.qtyLost
+          quantityAvailable: qtyGood,
+          quantityRepairing: qtyRepair,
+          quantityBroken: qtyBroken,
+          quantityLost: qtyLost
         },
         update: {
-          quantityAvailable: { increment: data.qtyGood },
-          quantityRepairing: { increment: data.qtyRepair },
-          quantityBroken: { increment: data.qtyBroken },
-          quantityLost: { increment: data.qtyLost }
+          quantityAvailable: { increment: qtyGood },
+          quantityRepairing: { increment: qtyRepair },
+          quantityBroken: { increment: qtyBroken },
+          quantityLost: { increment: qtyLost }
         }
       });
 
@@ -2397,7 +2444,35 @@ export class ToolService {
           fromLocation: data.fromLocation,
           toLocation: data.toLocation,
           performedBy,
-          note: data.note || `Thu hồi (Tốt: ${data.qtyGood}, Sửa: ${data.qtyRepair}, Hỏng hủy: ${data.qtyBroken}, Mất: ${data.qtyLost})`
+          note: data.note || `Thu hồi (Tốt: ${qtyGood}, Sửa: ${qtyRepair}, Hỏng hủy: ${qtyBroken}, Mất: ${qtyLost})`
+        }
+      });
+
+      const documentNo = await generateDocumentNo(tx, 'BBTH-CCDC');
+      const document = await tx.toolHandoverDocument.create({
+        data: {
+          documentNo,
+          type: 'RECALL',
+          status: 'COMPLETED',
+          confirmedAt: new Date(),
+          senderName: data.fromLocation,
+          senderDepartment: 'Địa điểm sử dụng',
+          recipientName: data.toLocation,
+          recipientDepartment: 'Bộ phận QLTS / Kho',
+          newLocation: data.toLocation,
+          reason: `Thu hồi ${data.quantity} ${tool.unit || 'Cái'} CCDC về ${data.toLocation}`,
+          note: data.note || `Thu hồi từ ${data.fromLocation}. Tốt: ${qtyGood}; sửa: ${qtyRepair}; hỏng hủy: ${qtyBroken}; mất: ${qtyLost}.`,
+          items: {
+            create: {
+              toolId: tool.id,
+              toolCode: tool.toolCode,
+              toolName: tool.toolName,
+              unit: tool.unit,
+              quantity: data.quantity,
+              oldStatus: 'USING',
+              newStatus: 'IN_STOCK'
+            }
+          }
         }
       });
 
@@ -2405,12 +2480,12 @@ export class ToolService {
         entityType: 'TOOL_EQUIPMENT',
         entityId: data.toolId,
         action: 'RECALL_STOCK' as any,
-        details: { quantity: data.quantity, good: data.qtyGood, repair: data.qtyRepair, broken: data.qtyBroken, lost: data.qtyLost, from: data.fromLocation, to: data.toLocation },
+        details: { quantity: data.quantity, good: qtyGood, repair: qtyRepair, broken: qtyBroken, lost: qtyLost, from: data.fromLocation, to: data.toLocation, documentNo },
         performedBy,
         tx
       });
 
-      return stockTx;
+      return { stockTransaction: stockTx, document };
     });
   }
 

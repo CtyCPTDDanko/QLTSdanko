@@ -237,7 +237,7 @@ export class PdfUtil {
           { 
             text: nfc(isAreaRecipient
               ? `Khu vực nhận: ${nfc(document.recipientArea) || nfc(document.newLocation) || '................................'}`
-              : `Ông/Bà: ${document.type === 'RECALL' ? (nfc(document.senderName) || '................................') : (nfc(document.recipientName) || '................................')}`),
+              : `Ông/Bà: ${nfc(document.recipientName) || '................................'}`),
             style: 'normalText', 
             width: '50%' 
           },
@@ -331,7 +331,7 @@ export class PdfUtil {
           case 'unit':
             return { text: nfc(item.unit) || nfc('Cái'), style: 'tableCell', alignment: 'center', margin: vMargin };
           case 'quantity':
-            return { text: String(isToolDocument ? (record?.quantity || 1) : 1), style: 'tableCell', alignment: 'center', margin: vMargin };
+            return { text: String(isToolDocument ? (item.quantity || record?.quantity || 1) : 1), style: 'tableCell', alignment: 'center', margin: vMargin };
           case 'condition':
             return { text: nfc(cond), style: 'tableCell', margin: vMargin };
           case 'note':

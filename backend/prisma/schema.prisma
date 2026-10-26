@@ -1656,6 +1656,7 @@ model ToolHandoverItem {
   toolCode             String
   toolName             String
   unit                 String?
+  quantity             Int                  @default(1)
   oldStatus            String?
   newStatus            String?
   handoverDocument     ToolHandoverDocument @relation(fields: [handoverDocumentId], references: [id])
