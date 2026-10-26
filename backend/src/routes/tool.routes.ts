@@ -377,6 +377,107 @@ router.get('/handover/:id/pdf', authenticateToken, async (req: any, res) => {
   }
 });
 
+// Print one document for every quantity stock movement. Handover and recall
+// movements reuse their persisted document; all other movements render a
+// point-in-time record from the immutable stock transaction.
+router.get('/stock/:transactionId/pdf', authenticateToken, async (req: any, res) => {
+  try {
+    const transactionId = parseInt(req.params.transactionId as string, 10);
+    if (isNaN(transactionId)) return res.status(400).json({ message: 'ID biến động không hợp lệ.' });
+
+    const transaction = await prisma.toolStockTransaction.findUnique({
+      where: { id: transactionId },
+      include: { tool: true }
+    });
+    if (!transaction || transaction.tool.isDeleted) {
+      return res.status(404).json({ message: 'Không tìm thấy biến động CCDC.' });
+    }
+
+    const persistedDocumentType = transaction.type === 'USE'
+      ? 'HANDOVER'
+      : transaction.type === 'RECALL'
+        ? 'RECALL'
+        : null;
+    if (persistedDocumentType) {
+      const documentItems = await prisma.toolHandoverItem.findMany({
+        where: {
+          toolId: transaction.toolId,
+          handoverDocument: { type: persistedDocumentType }
+        },
+        include: { handoverDocument: { include: { items: true } } }
+      });
+      const exactDocument = documentItems
+        .map(item => item.handoverDocument)
+        .filter(Boolean)
+        .sort((left, right) => (
+          Math.abs(new Date(left.createdAt).getTime() - transaction.createdAt.getTime())
+          - Math.abs(new Date(right.createdAt).getTime() - transaction.createdAt.getTime())
+        ))[0];
+
+      if (exactDocument) {
+        const pdfBuffer = await PdfUtil.generateHandoverPdf(exactDocument, {
+          itemKind: 'TOOL',
+          templateCode: 'BM02/QLTS'
+        });
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename=BB_CCDC_${exactDocument.documentNo.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
+        return res.send(pdfBuffer);
+      }
+    }
+
+    const documentDefinitions: Record<string, { title: string; type: string; code: string }> = {
+      IMPORT: { title: 'PHIẾU NHẬP KHO CÔNG CỤ DỤNG CỤ', type: 'HANDOVER', code: 'PNK-CCDC' },
+      TRANSFER: { title: 'BIÊN BẢN ĐIỀU CHUYỂN CÔNG CỤ DỤNG CỤ', type: 'TRANSFER', code: 'BBDC-CCDC' },
+      USE: { title: 'BIÊN BẢN BÀN GIAO CÔNG CỤ DỤNG CỤ', type: 'HANDOVER', code: 'BBBG-CCDC' },
+      RECALL: { title: 'BIÊN BẢN THU HỒI CÔNG CỤ DỤNG CỤ', type: 'RECALL', code: 'BBTH-CCDC' },
+      DAMAGE: { title: 'PHIẾU BÁO HỎNG CÔNG CỤ DỤNG CỤ', type: 'HANDOVER', code: 'BBBH-CCDC' },
+      REPAIR_COMPLETE: { title: 'PHIẾU XÁC NHẬN SỬA CHỮA CÔNG CỤ DỤNG CỤ', type: 'HANDOVER', code: 'BBSX-CCDC' },
+      LOST: { title: 'PHIẾU BÁO MẤT CÔNG CỤ DỤNG CỤ', type: 'HANDOVER', code: 'BBM-CCDC' },
+      DESTROY: { title: 'BIÊN BẢN HỦY CÔNG CỤ DỤNG CỤ', type: 'HANDOVER', code: 'BBH-CCDC' },
+      ADJUST: { title: 'BIÊN BẢN ĐIỀU CHỈNH TỒN KHO CÔNG CỤ DỤNG CỤ', type: 'HANDOVER', code: 'BBDCT-CCDC' }
+    };
+    const definition = documentDefinitions[transaction.type] || {
+      title: 'BIÊN BẢN BIẾN ĐỘNG KHO CÔNG CỤ DỤNG CỤ',
+      type: 'HANDOVER',
+      code: 'BBDK-CCDC'
+    };
+    const dateText = transaction.createdAt.toISOString().slice(0, 10).replace(/-/g, '');
+    const eventDocument = {
+      documentNo: `${definition.code}-${dateText}-${String(transaction.id).padStart(6, '0')}`,
+      type: definition.type,
+      createdAt: transaction.createdAt,
+      confirmedAt: transaction.createdAt,
+      senderName: transaction.fromLocation || transaction.performedBy,
+      senderDepartment: transaction.fromLocation ? 'Đơn vị xuất / bàn giao' : 'Bộ phận QLTS',
+      recipientName: transaction.toLocation || transaction.performedBy,
+      recipientDepartment: transaction.toLocation ? 'Đơn vị nhận' : 'Bộ phận QLTS',
+      newLocation: transaction.toLocation || transaction.fromLocation || transaction.tool.locationName,
+      newCity: transaction.tool.cityName,
+      reason: `${definition.title} - ${transaction.quantity} ${transaction.tool.unit || 'Cái'}`,
+      note: transaction.note || `Biến động ${transaction.type}`,
+      items: [{
+        toolId: transaction.toolId,
+        toolCode: transaction.tool.toolCode,
+        toolName: transaction.tool.toolName,
+        unit: transaction.tool.unit,
+        quantity: transaction.quantity,
+        oldStatus: null,
+        newStatus: null
+      }]
+    };
+    const pdfBuffer = await PdfUtil.generateHandoverPdf(eventDocument, {
+      itemKind: 'TOOL',
+      templateName: definition.title,
+      templateCode: definition.code
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=${eventDocument.documentNo}.pdf`);
+    res.send(pdfBuffer);
+  } catch (err: any) {
+    res.status(500).json({ message: err.message || 'Không thể tạo PDF biến động CCDC.' });
+  }
+});
+
 router.get('/handover/:id', authenticateToken, async (req, res) => {
   try {
     const id = parseInt(req.params.id as string, 10);

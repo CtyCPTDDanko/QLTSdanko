@@ -141,6 +141,15 @@ export const ToolDetail: React.FC = () => {
     }
   };
 
+  const handlePrintStockTransaction = (transactionId: number) => {
+    const token = localStorage.getItem('token') || '';
+    const printUrl = `${api.defaults.baseURL}/tools/stock/${transactionId}/pdf?token=${encodeURIComponent(token)}`;
+    const printWindow = window.open(printUrl, '_blank');
+    if (!printWindow) {
+      toast.error('Trình duyệt đã chặn cửa sổ in. Vui lòng cho phép popup.');
+    }
+  };
+
   const openEditModal = () => {
     const parsedCategory = splitToolCategory(tool.category);
     setEditForm({
@@ -1581,6 +1590,7 @@ export const ToolDetail: React.FC = () => {
                         <th className="px-4 py-3">Đến vị trí</th>
                         <th className="px-4 py-3">Người thực hiện</th>
                         <th className="px-4 py-3">Ghi chú</th>
+                        <th className="px-4 py-3 text-center">Biên bản</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y text-slate-700">
@@ -1610,6 +1620,16 @@ export const ToolDetail: React.FC = () => {
                             <td className="px-4 py-3 text-slate-500 max-w-[150px] truncate">{t.toLocation || '---'}</td>
                             <td className="px-4 py-3 font-semibold">{t.performedBy}</td>
                             <td className="px-4 py-3 text-slate-500 max-w-[200px] truncate" title={t.note}>{t.note || '---'}</td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handlePrintStockTransaction(t.id)}
+                                className="inline-flex items-center justify-center gap-1 rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1.5 text-[10px] font-black uppercase text-primary-700 transition-colors hover:bg-primary-100"
+                                title="In biên bản biến động"
+                              >
+                                <Printer className="h-3.5 w-3.5" /> In biên bản
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
