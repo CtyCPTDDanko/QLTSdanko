@@ -56,7 +56,7 @@ export const ToolDetail: React.FC = () => {
   // Modal Forms State
   const [transferForm, setTransferForm] = useState({ fromLocation: '', toLocation: '', quantity: 1, note: '' });
   const [allocateForm, setAllocateForm] = useState({ fromLocation: '', toLocation: '', quantity: 1, note: '' });
-  const [recallForm, setRecallForm] = useState({ fromLocation: '', toLocation: '', quantity: 1, qtyGood: 1, qtyBroken: 0, qtyLost: 0, note: '' });
+  const [recallForm, setRecallForm] = useState({ fromLocation: '', toLocation: '', quantity: 1, qtyGood: 1, qtyRepair: 0, qtyBroken: 0, qtyLost: 0, note: '' });
   const [damageForm, setDamageForm] = useState({ locationName: '', quantity: 1, canRepair: true, note: '' });
   const [repairCompleteForm, setRepairCompleteForm] = useState({ locationName: '', quantity: 1, actualCost: 0, note: '' });
   const [lostForm, setLostForm] = useState({ locationName: '', quantity: 1, responsibleUser: '', compensationValue: 0, documentNo: '', note: '' });
@@ -110,8 +110,9 @@ export const ToolDetail: React.FC = () => {
     e.preventDefault();
     try {
       setLoading(true);
-      await api.post(`/tools/stock/${endpoint}`, { ...payload, toolId: tool.id });
-      toast.success("Ghi nhận biến động kho thành công!");
+      const result = await api.post(`/tools/stock/${endpoint}`, { ...payload, toolId: tool.id });
+      const documentNo = result.data?.document?.documentNo;
+      toast.success(documentNo ? `Đã tạo biên bản ${documentNo}.` : "Ghi nhận biến động kho thành công!");
       setActiveStockModal('NONE');
       fetchToolDetail();
     } catch (err: any) {
@@ -512,13 +513,15 @@ export const ToolDetail: React.FC = () => {
   const hasRealPhoto = !!(filesInfo.avatarUrl || filesInfo.photoUrl);
   const hasSignedInvoice = !!(tool.invoiceBatch?.invoiceLegalStatus === 'SIGNED_VALID' || tool.invoiceBatch?.signedFileUrl || tool.invoiceBatch?.fileUrl);
   const hasHandoverDocument = (tool.assignments?.length || 0) > 0 || !!tool.handoverDate;
-  const handoverDocuments = Array.from(
+  const movementDocuments = Array.from(
     new Map(
       (tool.handoverItems || [])
         .filter((item: any) => item.handoverDocument)
         .map((item: any) => [item.handoverDocument.id, item.handoverDocument])
     ).values()
   ) as any[];
+  const handoverDocuments = movementDocuments.filter((document: any) => document.type !== 'RECALL');
+  const recallDocuments = movementDocuments.filter((document: any) => document.type === 'RECALL');
   const handoverTypeLabels: Record<string, string> = {
     HANDOVER: 'Bàn giao',
     TRANSFER: 'Điều chuyển',
@@ -1934,7 +1937,7 @@ export const ToolDetail: React.FC = () => {
                   {[
                     { key: 'invoice', title: 'Hóa đơn mua hàng', ok: !!tool.invoiceBatch, meta: tool.invoiceBatch ? `HĐ ${tool.invoiceBatch.invoiceNo}` : 'Chưa liên kết hóa đơn' },
                     { key: 'handover', title: 'Biên bản bàn giao', ok: handoverDocuments.length > 0 || (tool.assignments?.length || 0) > 0 || !!tool.handoverDate, meta: handoverDocuments.length > 0 ? `${handoverDocuments.length} biên bản` : `${tool.assignments?.length || 0} bản ghi cấp phát` },
-                    { key: 'recall', title: 'Biên bản thu hồi', ok: (tool.stockTransactions?.some((t: any) => t.type === 'RECALL') || false), meta: `${tool.stockTransactions?.filter((t: any) => t.type === 'RECALL').length || 0} lần thu hồi` },
+                    { key: 'recall', title: 'Biên bản thu hồi', ok: recallDocuments.length > 0 || (tool.stockTransactions?.some((t: any) => t.type === 'RECALL') || false), meta: recallDocuments.length > 0 ? `${recallDocuments.length} biên bản` : `${tool.stockTransactions?.filter((t: any) => t.type === 'RECALL').length || 0} lần thu hồi` },
                     { key: 'damage', title: 'Biên bản báo hỏng', ok: (tool.repairTickets?.length || 0) > 0 || (tool.damageReports?.length || 0) > 0, meta: `${(tool.repairTickets?.length || 0) + (tool.damageReports?.length || 0)} hồ sơ` },
                     { key: 'lost', title: 'Biên bản mất', ok: (tool.lostReports?.length || 0) > 0, meta: `${tool.lostReports?.length || 0} hồ sơ` },
                     { key: 'liquidation', title: 'Biên bản hủy', ok: (tool.liquidations?.length || 0) > 0 || tool.status === 'LIQUIDATED', meta: `${tool.liquidations?.length || 0} hồ sơ thanh lý/hủy` }
@@ -1971,6 +1974,32 @@ export const ToolDetail: React.FC = () => {
                         )}
                         {doc.key === 'handover' && doc.ok && handoverDocuments.length === 0 && (
                           <p className="mt-2 text-[10px] font-bold text-amber-600">Hồ sơ cũ chưa có tệp biên bản để in.</p>
+                        )}
+                        {doc.key === 'recall' && recallDocuments.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            {recallDocuments.map((recallDocument: any) => (
+                              <div key={recallDocument.id} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border border-slate-200 bg-white p-2.5">
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-[11px] font-black text-slate-700">
+                                    {recallDocument.documentNo}
+                                  </p>
+                                  <p className="text-[10px] font-bold text-slate-400">
+                                    {new Date(recallDocument.documentDate || recallDocument.createdAt).toLocaleDateString('vi-VN')}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handlePrintHandoverDocument(recallDocument.id)}
+                                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black uppercase text-amber-700 transition-colors hover:bg-amber-100"
+                                >
+                                  <Printer className="h-3.5 w-3.5" /> In biên bản
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {doc.key === 'recall' && doc.ok && recallDocuments.length === 0 && (
+                          <p className="mt-2 text-[10px] font-bold text-amber-600">Dữ liệu thu hồi cũ chưa có biên bản để in.</p>
                         )}
                       </div>
                     </div>
@@ -2330,7 +2359,7 @@ export const ToolDetail: React.FC = () => {
                     required 
                     className="w-full bg-slate-50 border rounded-xl px-3 py-2 text-xs font-semibold"
                     value={recallForm.quantity}
-                    onChange={e => setRecallForm({ ...recallForm, quantity: Number(e.target.value) || 1, qtyGood: Number(e.target.value) || 1, qtyBroken: 0, qtyLost: 0 })}
+                    onChange={e => setRecallForm({ ...recallForm, quantity: Number(e.target.value) || 1, qtyGood: Number(e.target.value) || 1, qtyRepair: 0, qtyBroken: 0, qtyLost: 0 })}
                   />
                 </div>
                 <div className="space-y-1">
@@ -2364,8 +2393,8 @@ export const ToolDetail: React.FC = () => {
                         type="number" 
                         min={0}
                         className="w-full bg-white border rounded-lg px-2 py-1 text-xs text-center font-bold text-amber-700"
-                        value={recallForm.qtyBroken}
-                        onChange={e => setRecallForm({ ...recallForm, qtyBroken: Number(e.target.value) || 0 })}
+                        value={recallForm.qtyRepair}
+                        onChange={e => setRecallForm({ ...recallForm, qtyRepair: Number(e.target.value) || 0 })}
                       />
                     </div>
                     <div className="space-y-1">
@@ -2379,8 +2408,8 @@ export const ToolDetail: React.FC = () => {
                       />
                     </div>
                   </div>
-                  {recallForm.qtyGood + recallForm.qtyBroken + recallForm.qtyLost !== recallForm.quantity && (
-                    <p className="text-[10px] text-red-500 font-bold">Lưu ý: Tổng chi tiết ({recallForm.qtyGood + recallForm.qtyBroken + recallForm.qtyLost}) khác tổng số lượng yêu cầu ({recallForm.quantity}).</p>
+                  {recallForm.qtyGood + recallForm.qtyRepair + recallForm.qtyBroken + recallForm.qtyLost !== recallForm.quantity && (
+                    <p className="text-[10px] text-red-500 font-bold">Lưu ý: Tổng chi tiết ({recallForm.qtyGood + recallForm.qtyRepair + recallForm.qtyBroken + recallForm.qtyLost}) khác tổng số lượng yêu cầu ({recallForm.quantity}).</p>
                   )}
                 </div>
 
@@ -2395,7 +2424,7 @@ export const ToolDetail: React.FC = () => {
               </div>
               <div className="p-4 bg-slate-50 border-t flex justify-end gap-2">
                 <button type="button" onClick={() => setActiveStockModal('NONE')} className="px-4 py-2 border rounded-xl text-xs font-bold bg-white text-slate-700">Hủy</button>
-                <button type="submit" disabled={recallForm.qtyGood + recallForm.qtyBroken + recallForm.qtyLost !== recallForm.quantity} className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50">Xác nhận thu hồi</button>
+                <button type="submit" disabled={recallForm.qtyGood + recallForm.qtyRepair + recallForm.qtyBroken + recallForm.qtyLost !== recallForm.quantity} className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50">Xác nhận thu hồi &amp; tạo biên bản</button>
               </div>
             </form>
           </div>
