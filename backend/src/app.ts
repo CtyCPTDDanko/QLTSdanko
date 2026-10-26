@@ -35,7 +35,7 @@ dotenv.config();
 const app = express();
 
 const allowedOrigins = [
-  'https://qltsdankogroup.vercel.app',
+  'https://quanlytaisandanko.vercel.app',
   'https://qltsdanko.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000'
