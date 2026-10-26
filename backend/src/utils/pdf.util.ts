@@ -95,6 +95,60 @@ export class PdfUtil {
     const day = docDate.getDate().toString().padStart(2, '0');
     const month = (docDate.getMonth() + 1).toString().padStart(2, '0');
     const year = docDate.getFullYear();
+
+    // Quantity-managed CCDC has one master record for many physical items. Older
+    // handover documents were created before ToolHandoverItem.quantity existed,
+    // therefore their stored item quantity is 1. For those documents, recover
+    // the quantity from the matching stock movement so reprinting a historical
+    // document remains accurate without changing the inventory balance.
+    const stockTransactionType = document.type === 'HANDOVER'
+      ? 'USE'
+      : document.type === 'RECALL'
+        ? 'RECALL'
+        : document.type === 'TRANSFER'
+          ? 'TRANSFER'
+          : null;
+    const stockTransactions = isToolDocument && stockTransactionType
+      ? await prisma.toolStockTransaction.findMany({
+          where: {
+            toolId: { in: itemIds },
+            type: stockTransactionType
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 100
+        })
+      : [];
+    const normalizedLocation = (value?: string | null) => nfc(value).trim().toLocaleLowerCase();
+    const sourceLocation = normalizedLocation(document.senderName);
+    const destinationLocation = normalizedLocation(document.recipientName || document.newLocation);
+    const documentTimestamp = docDate.getTime();
+    const printedQuantityByToolId = new Map<number, number>();
+
+    for (const item of document.items) {
+      const storedQuantity = Number(item.quantity || 0);
+      const masterQuantity = Number(recordMap.get(item.toolId)?.quantity || 0);
+      if (storedQuantity > 1 || masterQuantity <= 1) {
+        printedQuantityByToolId.set(item.toolId, storedQuantity || 1);
+        continue;
+      }
+
+      const matchingTransactions = stockTransactions.filter((transaction: any) => {
+        if (transaction.toolId !== item.toolId) return false;
+        const fromMatches = !sourceLocation || normalizedLocation(transaction.fromLocation) === sourceLocation;
+        const toMatches = !destinationLocation || normalizedLocation(transaction.toLocation) === destinationLocation;
+        return fromMatches && toMatches;
+      });
+      const candidateTransactions = matchingTransactions.length > 0
+        ? matchingTransactions
+        : stockTransactions.filter((transaction: any) => transaction.toolId === item.toolId);
+      const nearestTransaction = candidateTransactions
+        .sort((left: any, right: any) => (
+          Math.abs(new Date(left.createdAt).getTime() - documentTimestamp)
+          - Math.abs(new Date(right.createdAt).getTime() - documentTimestamp)
+        ))[0];
+
+      printedQuantityByToolId.set(item.toolId, Number(nearestTransaction?.quantity || storedQuantity || 1));
+    }
     
     const location = nfc(document.newLocation) || '................................';
     const city = nfc(document.newCity) || 'Hà Nội';
@@ -331,7 +385,7 @@ export class PdfUtil {
           case 'unit':
             return { text: nfc(item.unit) || nfc('Cái'), style: 'tableCell', alignment: 'center', margin: vMargin };
           case 'quantity':
-            return { text: String(isToolDocument ? (item.quantity || record?.quantity || 1) : 1), style: 'tableCell', alignment: 'center', margin: vMargin };
+            return { text: String(isToolDocument ? (printedQuantityByToolId.get(item.toolId) || item.quantity || record?.quantity || 1) : 1), style: 'tableCell', alignment: 'center', margin: vMargin };
           case 'condition':
             return { text: nfc(cond), style: 'tableCell', margin: vMargin };
           case 'note':
