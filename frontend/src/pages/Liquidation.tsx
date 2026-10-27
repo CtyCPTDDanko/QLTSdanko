@@ -23,6 +23,7 @@ import { format } from 'date-fns';
 export const Liquidation: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [reports, setReports] = useState<any[]>([]);
+  const [selectedReportKeys, setSelectedReportKeys] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   
@@ -80,6 +81,7 @@ export const Liquidation: React.FC = () => {
         }))
       );
       setReports(ledgerRows);
+      setSelectedReportKeys([]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -151,6 +153,84 @@ export const Liquidation: React.FC = () => {
     SCRAP: 'Bán phế liệu'
   }[String(type || '')] || 'Thanh lý');
 
+  const getReportKey = (asset: any) => `${asset.liquidationRecord?.id || 'unknown'}-${asset.id}`;
+  const selectedReports = reports.filter((asset) => selectedReportKeys.includes(getReportKey(asset)));
+  const isAllReportsSelected = reports.length > 0 && selectedReportKeys.length === reports.length;
+
+  const toggleReportSelection = (asset: any) => {
+    const key = getReportKey(asset);
+    setSelectedReportKeys((current) => current.includes(key)
+      ? current.filter((item) => item !== key)
+      : [...current, key]);
+  };
+
+  const toggleAllReportSelection = () => {
+    setSelectedReportKeys(isAllReportsSelected ? [] : reports.map(getReportKey));
+  };
+
+  const handlePrintSelectedReports = () => {
+    if (selectedReports.length === 0) return;
+
+    const escapeHtml = (value: unknown) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+    const rows = selectedReports.map((asset, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(asset.liquidationRecord?.liquidationCode || '---')}</td>
+        <td>${escapeHtml(asset.assetCode)}</td>
+        <td>${escapeHtml(asset.assetName)}</td>
+        <td>${escapeHtml(liquidationTypeLabel(asset.liquidationRecord?.liquidationType))}</td>
+        <td>${asset.liquidationRecord?.liquidationDate ? escapeHtml(format(new Date(asset.liquidationRecord.liquidationDate), 'dd/MM/yyyy')) : '---'}</td>
+        <td>${escapeHtml(Number(asset.purchasePriceExVat || 0).toLocaleString('vi-VN'))} đ</td>
+      </tr>
+    `).join('');
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Trình duyệt đang chặn cửa sổ in. Vui lòng cho phép popup rồi thử lại.');
+      return;
+    }
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Danh sách tài sản thanh lý đã chọn</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
+            h1 { font-size: 18px; margin: 0 0 8px; text-transform: uppercase; text-align: center; }
+            .subtitle { text-align: center; font-size: 12px; margin-bottom: 24px; color: #475569; }
+            p { margin: 0 0 16px; font-size: 12px; color: #334155; line-height: 1.55; }
+            table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+            th, td { border: 1px solid #94a3b8; padding: 6px; text-align: left; vertical-align: top; }
+            th { background: #f1f5f9; text-transform: uppercase; font-size: 9.5px; }
+            .signatures { display: flex; justify-content: space-between; gap: 24px; margin-top: 52px; text-align: center; font-size: 12px; font-weight: 700; }
+            .signatures span { display: block; margin-top: 5px; font-size: 11px; color: #475569; font-style: italic; font-weight: 400; }
+          </style>
+        </head>
+        <body>
+          <h1>Danh sách tài sản thanh lý đã chọn</h1>
+          <p class="subtitle">Số lượng: ${selectedReports.length} tài sản • Ngày lập: ${new Date().toLocaleString('vi-VN')}</p>
+          <p>Danh sách được trích từ sổ thanh lý tài sản để phục vụ đối chiếu và ký xác nhận nội bộ.</p>
+          <table>
+            <thead><tr><th>STT</th><th>Mã hồ sơ</th><th>Mã tài sản</th><th>Tên tài sản</th><th>Loại thanh lý</th><th>Ngày thanh lý</th><th>Nguyên giá</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="signatures">
+            <div>NGƯỜI LẬP<span>(Ký, ghi rõ họ tên)</span></div>
+            <div>ĐẠI DIỆN BỘ PHẬN QLTS<span>(Ký, ghi rõ họ tên)</span></div>
+            <div>HỘI ĐỒNG THANH LÝ<span>(Ký, ghi rõ họ tên)</span></div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <div className="flex justify-between items-center">
@@ -181,12 +261,30 @@ export const Liquidation: React.FC = () => {
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
           <h3 className="font-bold text-slate-800">Danh sách tài sản Đã Thanh Lý (Đã khóa)</h3>
+          {selectedReports.length > 0 && (
+            <button
+              type="button"
+              onClick={handlePrintSelectedReports}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-black"
+            >
+              <Printer className="h-4 w-4" /> In danh sách đã chọn ({selectedReports.length})
+            </button>
+          )}
         </div>
         
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="text-[11px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                <th className="w-12 px-4 py-4 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllReportsSelected}
+                    onChange={toggleAllReportSelection}
+                    aria-label="Chọn tất cả tài sản thanh lý"
+                    className="h-4 w-4 cursor-pointer rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+                  />
+                </th>
                 <th className="px-6 py-4">Tài sản</th>
                 <th className="px-6 py-4">Số hồ sơ</th>
                 <th className="px-6 py-4">Loại thanh lý</th>
@@ -199,6 +297,15 @@ export const Liquidation: React.FC = () => {
             <tbody className="divide-y divide-slate-50">
               {reports.map((asset) => (
                 <tr key={`${asset.liquidationRecord?.id}-${asset.id}`} className="hover:bg-slate-50 transition-colors opacity-75">
+                  <td className="px-4 py-4 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedReportKeys.includes(getReportKey(asset))}
+                      onChange={() => toggleReportSelection(asset)}
+                      aria-label={`Chọn ${asset.assetCode}`}
+                      className="h-4 w-4 cursor-pointer rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+                    />
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center"><Package className="h-5 w-5 text-slate-400" /></div>
@@ -240,7 +347,7 @@ export const Liquidation: React.FC = () => {
               ))}
               {reports.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center text-slate-400 italic">Chưa có hồ sơ thanh lý nào trong sổ sách.</td>
+                  <td colSpan={8} className="px-6 py-20 text-center text-slate-400 italic">Chưa có hồ sơ thanh lý nào trong sổ sách.</td>
                 </tr>
               )}
             </tbody>
