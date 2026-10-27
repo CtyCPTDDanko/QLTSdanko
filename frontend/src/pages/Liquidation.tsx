@@ -128,14 +128,8 @@ export const Liquidation: React.FC = () => {
   };
 
   const handlePrintLiquidation = async (asset: any) => {
-    const recordId = asset.liquidations?.[0]?.liquidationRecord?.id;
-    if (!recordId) {
-      toast.error('Không tìm thấy hồ sơ thanh lý của tài sản này.');
-      return;
-    }
-
     try {
-      const response = await api.get(`/operational/liquidation/${recordId}/pdf`, { responseType: 'blob' });
+      const response = await api.get(`/operational/liquidation/asset/${asset.id}/pdf`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
       window.open(url, '_blank', 'noopener,noreferrer');
       window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
@@ -218,9 +212,8 @@ export const Liquidation: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handlePrintLiquidation(asset)}
-                      disabled={!asset.liquidations?.[0]?.liquidationRecord?.id}
                       title="In biên bản thanh lý"
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
                     >
                       <Printer className="h-4 w-4" /> In biên bản
                     </button>

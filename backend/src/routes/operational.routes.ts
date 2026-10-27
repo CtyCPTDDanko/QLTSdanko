@@ -36,23 +36,29 @@ router.post('/liquidation', authenticateToken, async (req: any, res) => {
   }
 });
 
-// In biên bản theo hồ sơ thanh lý. Một hồ sơ có thể chứa nhiều tài sản.
-router.get('/liquidation/:id/pdf', authenticateToken, async (req: any, res) => {
+// In biên bản theo tài sản đã thanh lý. Một hồ sơ có thể chứa nhiều tài sản.
+router.get('/liquidation/asset/:assetId/pdf', authenticateToken, async (req: any, res) => {
   try {
-    const recordId = Number(req.params.id);
-    if (!Number.isInteger(recordId) || recordId <= 0) {
-      return res.status(400).json({ message: 'Mã hồ sơ thanh lý không hợp lệ.' });
+    const assetId = Number(req.params.assetId);
+    if (!Number.isInteger(assetId) || assetId <= 0) {
+      return res.status(400).json({ message: 'Mã tài sản không hợp lệ.' });
     }
 
-    const record = await prisma.liquidationRecord.findUnique({
-      where: { id: recordId },
+    const liquidationItem = await prisma.liquidationItem.findFirst({
+      where: { assetId },
+      orderBy: { id: 'desc' },
       include: {
-        items: {
-          include: { asset: true },
-          orderBy: { id: 'asc' }
+        liquidationRecord: {
+          include: {
+            items: {
+              include: { asset: true },
+              orderBy: { id: 'asc' }
+            }
+          }
         }
       }
     });
+    const record = liquidationItem?.liquidationRecord;
     if (!record) return res.status(404).json({ message: 'Không tìm thấy hồ sơ thanh lý.' });
 
     const pdfBuffer = await PdfUtil.generateLiquidationPdf(record);
