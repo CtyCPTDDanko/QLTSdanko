@@ -79,6 +79,137 @@ try {
 pdfmake.setFonts(fonts);
 
 export class PdfUtil {
+  /** Biên bản thanh lý cho một hồ sơ gồm một hoặc nhiều tài sản. */
+  static async generateLiquidationPdf(record: any): Promise<Buffer> {
+    const documentDate = new Date(record.liquidationDate || record.createdAt || new Date());
+    const day = String(documentDate.getDate()).padStart(2, '0');
+    const month = String(documentDate.getMonth() + 1).padStart(2, '0');
+    const year = documentDate.getFullYear();
+    const typeLabels: Record<string, string> = {
+      SELL: 'Bán thanh lý',
+      DISPOSE: 'Hủy / bỏ',
+      DONATE: 'Cho tặng',
+      RETURN_SUPPLIER: 'Trả nhà cung cấp',
+      SCRAP: 'Bán phế liệu'
+    };
+    const assets = (record.items || []).map((item: any) => item.asset).filter(Boolean);
+    const totalAssetValue = assets.reduce((sum: number, asset: any) => sum + Number(asset.purchasePriceExVat || 0), 0);
+    const formatMoney = (value: unknown) => Number(value || 0).toLocaleString('vi-VN');
+
+    const content: any[] = [
+      {
+        columns: [
+          {
+            stack: [
+              { text: nfc('CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM'), style: 'nationalHeader', alignment: 'center' },
+              { text: nfc('Độc lập - Tự do - Hạnh phúc'), style: 'nationalMotto', alignment: 'center' }
+            ],
+            width: '*'
+          },
+          {
+            stack: [
+              { qr: nfc(record.liquidationCode), fit: 50, alignment: 'center' },
+              { text: nfc('Mã hồ sơ thanh lý'), fontSize: 6.5, color: '#64748b', alignment: 'center', margin: [0, 3, 0, 0] }
+            ],
+            width: 72
+          },
+          { text: nfc('Mẫu số: BM04/QLTS'), style: 'templateCodeHeader', alignment: 'right', width: 110 }
+        ],
+        columnGap: 10
+      },
+      { text: '\n\n' },
+      { text: nfc('BIÊN BẢN THANH LÝ TÀI SẢN'), style: 'documentTitle', alignment: 'center' },
+      { text: nfc(`Số: ${record.liquidationCode}`), style: 'documentSubNo', alignment: 'center' },
+      { text: '\n\n' },
+      { text: nfc(`Hôm nay, ngày ${day} tháng ${month} năm ${year}, Hội đồng thanh lý tiến hành lập biên bản thanh lý tài sản.`), style: 'normalText' },
+      { text: nfc(`Hình thức thanh lý: ${typeLabels[record.liquidationType] || record.liquidationType || 'Thanh lý'}.`), style: 'normalText', margin: [0, 5, 0, 0] },
+      { text: nfc(`Lý do thanh lý: ${record.reason || '................................'}.`), style: 'normalText', margin: [0, 5, 0, 10] },
+      { text: nfc('Danh sách tài sản thanh lý:'), style: 'normalTextBold', margin: [0, 0, 0, 8] }
+    ];
+
+    content.push({
+      table: {
+        headerRows: 1,
+        dontBreakRows: true,
+        widths: [22, 82, '*', 60, 45, 58],
+        body: [
+          [
+            { text: 'STT', style: 'tableHeader', alignment: 'center' },
+            { text: 'Mã tài sản', style: 'tableHeader', alignment: 'center' },
+            { text: 'Tên tài sản', style: 'tableHeader' },
+            { text: 'Serial', style: 'tableHeader' },
+            { text: 'ĐVT', style: 'tableHeader', alignment: 'center' },
+            { text: 'Nguyên giá', style: 'tableHeader', alignment: 'right' }
+          ],
+          ...assets.map((asset: any, index: number) => [
+            { text: String(index + 1), style: 'tableCell', alignment: 'center' },
+            { text: nfc(asset.assetCode) || '---', style: 'tableCellCode', alignment: 'center' },
+            { text: nfc(asset.assetName) || '---', style: 'tableCell' },
+            { text: nfc(asset.serialNumber) || '---', style: 'tableCell' },
+            { text: nfc(asset.unit) || 'Cái', style: 'tableCell', alignment: 'center' },
+            { text: `${formatMoney(asset.purchasePriceExVat)} đ`, style: 'tableCell', alignment: 'right' }
+          ])
+        ]
+      },
+      layout: {
+        hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length) ? 1.5 : 0.8,
+        vLineWidth: (i: number, node: any) => (i === 0 || i === node.table.widths.length) ? 1.5 : 0.8,
+        hLineColor: () => '#475569',
+        vLineColor: () => '#475569'
+      }
+    });
+
+    content.push(
+      { text: nfc(`Tổng nguyên giá tài sản: ${formatMoney(totalAssetValue)} đ.`), style: 'normalTextBold', alignment: 'right', margin: [0, 8, 0, 0] },
+      { text: nfc(`Giá trị thanh lý thu hồi: ${formatMoney(record.totalValue)} đ.`), style: 'normalTextBold', alignment: 'right', margin: [0, 3, 0, 10] },
+      { text: nfc(`Đơn vị/đối tác nhận: ${record.buyerName || '................................'}.`), style: 'normalText' },
+      ...(record.documentNo ? [{ text: nfc(`Số chứng từ/hợp đồng: ${record.documentNo}.`), style: 'normalText', margin: [0, 4, 0, 0] }] : []),
+      ...(record.note ? [{ text: nfc(`Ghi chú: ${record.note}.`), style: 'normalText', margin: [0, 4, 0, 0] }] : []),
+      { text: '\n' },
+      { text: nfc('Biên bản được lập thành các bản có giá trị như nhau, các bên cùng ký xác nhận.'), style: 'commitmentText', margin: [0, 3, 0, 18] },
+      { text: nfc(`Hà Nội, ngày ${day} tháng ${month} năm ${year}`), style: 'normalTextItalic', alignment: 'right', margin: [0, 0, 0, 15] },
+      {
+        columns: [
+          { stack: [{ text: 'ĐẠI DIỆN BỘ PHẬN QLTS', style: 'signatureRole' }, { text: '(Ký, ghi rõ họ tên)', style: 'signatureSubText' }], alignment: 'center', width: '33.33%' },
+          { stack: [{ text: 'HỘI ĐỒNG THANH LÝ', style: 'signatureRole' }, { text: '(Ký, ghi rõ họ tên)', style: 'signatureSubText' }], alignment: 'center', width: '33.33%' },
+          { stack: [{ text: 'KẾ TOÁN', style: 'signatureRole' }, { text: '(Ký, ghi rõ họ tên)', style: 'signatureSubText' }], alignment: 'center', width: '33.33%' }
+        ]
+      }
+    );
+
+    const docDefinition: TDocumentDefinitions = {
+      pageSize: 'A4',
+      pageMargins: [56, 56, 56, 70],
+      content,
+      footer: (currentPage: number, pageCount: number) => ({
+        margin: [56, -15, 56, 0],
+        columns: [
+          { text: nfc(`Trang ${currentPage}/${pageCount}`), fontSize: 8, color: '#64748b' },
+          { text: nfc(`Mã hồ sơ: ${record.liquidationCode}`), fontSize: 8, color: '#64748b', alignment: 'right' }
+        ]
+      }),
+      styles: {
+        nationalHeader: { fontSize: 9, bold: true, color: '#0f172a' },
+        nationalMotto: { fontSize: 8, bold: true, color: '#0f172a', decoration: 'underline', margin: [0, 3, 0, 0] },
+        templateCodeHeader: { fontSize: 9, bold: true, italics: true, color: '#334155' },
+        documentTitle: { fontSize: 14, bold: true, color: '#0f172a' },
+        documentSubNo: { fontSize: 10, bold: true, italics: true, color: '#334155' },
+        normalText: { fontSize: 9.5, color: '#0f172a' },
+        normalTextBold: { fontSize: 9.5, bold: true, color: '#0f172a' },
+        normalTextItalic: { fontSize: 9.5, italics: true, color: '#0f172a' },
+        tableHeader: { fontSize: 8.5, bold: true, color: '#0f172a', margin: [0, 4, 0, 4] },
+        tableCell: { fontSize: 8.5, color: '#0f172a', margin: [0, 4, 0, 4] },
+        tableCellCode: { fontSize: 8, bold: true, color: '#0f172a', margin: [0, 4, 0, 4] },
+        commitmentText: { fontSize: 8.5, italics: true, color: '#334155' },
+        signatureRole: { fontSize: 9.5, bold: true, color: '#0f172a' },
+        signatureSubText: { fontSize: 8, italics: true, color: '#475569', margin: [0, 2, 0, 0] }
+      },
+      defaultStyle: { font: 'Roboto' }
+    };
+
+    return await pdfmake.createPdf(docDefinition).getBuffer();
+  }
+
   static async generateHandoverPdf(
     document: any, 
     options: { configJson?: any, templateName?: string, templateCode?: string, itemKind?: 'ASSET' | 'TOOL' } = {}
