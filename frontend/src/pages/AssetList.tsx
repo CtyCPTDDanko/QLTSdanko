@@ -31,7 +31,8 @@ import {
   Loader2,
   Filter,
   Edit3,
-  Building2
+  Building2,
+  FileText
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -1429,17 +1430,23 @@ export const AssetList: React.FC = () => {
 
   const handleExportSelectedPdf = () => {
     if (selectedAssets.length === 0) return;
+    const escapeHtml = (value: unknown) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
     const rows = selectedAssets.map((asset: any, index: number) => `
       <tr>
         <td>${index + 1}</td>
-        <td>${asset.assetCode || ''}</td>
-        <td>${asset.assetName || asset.assetNameShort || ''}</td>
-        <td>${asset.serialNumber || ''}</td>
-        <td>${asset.currentUserName || ''}</td>
-        <td>${asset.departmentName || ''}</td>
-        <td>${asset.cityName || ''}</td>
-        <td>${cleanLocationName(asset.cityName, asset.locationName, asset.projectName, asset.departmentName) || ''}</td>
-        <td>${getStatusLabel(asset.status).label}</td>
+        <td>${escapeHtml(asset.assetCode)}</td>
+        <td>${escapeHtml(asset.assetName || asset.assetNameShort)}</td>
+        <td>${escapeHtml(asset.serialNumber || '---')}</td>
+        <td>${escapeHtml(asset.unit || 'Cái')}</td>
+        <td>${escapeHtml(asset.currentUserName || 'Chưa cấp phát')}</td>
+        <td>${escapeHtml(asset.departmentName || 'Chưa có phòng ban')}</td>
+        <td>${escapeHtml(cleanLocationName(asset.cityName, asset.locationName, asset.projectName, asset.departmentName) || '---')}</td>
+        <td>${escapeHtml(getStatusLabel(asset.status).label)}</td>
       </tr>
     `).join('');
 
@@ -1452,28 +1459,37 @@ export const AssetList: React.FC = () => {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Báo cáo tài sản đã chọn</title>
+      <title>Biên bản danh sách tài sản đã chọn</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
-            h1 { font-size: 18px; margin: 0 0 8px; text-transform: uppercase; }
-            p { margin: 0 0 16px; font-size: 12px; color: #475569; }
+            h1 { font-size: 18px; margin: 0 0 8px; text-transform: uppercase; text-align: center; }
+            .subtitle { text-align: center; font-size: 12px; margin-bottom: 24px; }
+            p { margin: 0 0 16px; font-size: 12px; color: #334155; line-height: 1.55; }
             table { width: 100%; border-collapse: collapse; font-size: 11px; }
             th, td { border: 1px solid #cbd5e1; padding: 6px; text-align: left; vertical-align: top; }
             th { background: #f1f5f9; text-transform: uppercase; font-size: 10px; }
+            .signatures { display: flex; justify-content: space-between; gap: 24px; margin-top: 52px; text-align: center; font-size: 12px; font-weight: 700; }
+            .signatures span { display: block; margin-top: 5px; font-size: 11px; color: #475569; font-style: italic; font-weight: 400; }
           </style>
         </head>
         <body>
-          <h1>Báo cáo danh sách tài sản đã chọn</h1>
-          <p>Số lượng: ${selectedAssets.length} tài sản • Ngày xuất: ${new Date().toLocaleString('vi-VN')}</p>
+          <h1>Biên bản danh sách tài sản được chọn</h1>
+          <p class="subtitle">Số lượng: ${selectedAssets.length} tài sản • Ngày lập: ${new Date().toLocaleString('vi-VN')}</p>
+          <p>Danh sách dưới đây được trích từ Sổ tài sản để phục vụ đối chiếu, kiểm kê hoặc ký xác nhận nội bộ.</p>
           <table>
             <thead>
               <tr>
                 <th>STT</th><th>Mã tài sản</th><th>Tên tài sản</th><th>Serial</th>
-                <th>Người dùng</th><th>Phòng ban</th><th>Thành phố</th><th>Vị trí</th><th>Trạng thái</th>
+                <th>ĐVT</th><th>Người sử dụng</th><th>Phòng ban</th><th>Vị trí</th><th>Trạng thái</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>
+          <div class="signatures">
+            <div>NGƯỜI LẬP<span>(Ký, ghi rõ họ tên)</span></div>
+            <div>ĐẠI DIỆN BỘ PHẬN QLTS<span>(Ký, ghi rõ họ tên)</span></div>
+            <div>ĐẠI DIỆN ĐƠN VỊ LIÊN QUAN<span>(Ký, ghi rõ họ tên)</span></div>
+          </div>
         </body>
       </html>
     `);
@@ -2765,6 +2781,9 @@ export const AssetList: React.FC = () => {
               <button onClick={handleBulkPrint} className="h-11 flex items-center px-3 hover:bg-[#1E293B] rounded-lg text-xs font-bold transition-colors text-primary-400 whitespace-nowrap">
                 <Printer className="mr-2 h-4 w-4" /> In tem tài sản
               </button>
+              <button onClick={handleExportSelectedPdf} className="h-11 flex items-center px-3 hover:bg-[#1E293B] rounded-lg text-xs font-bold transition-colors text-sky-300 whitespace-nowrap">
+                <FileText className="mr-2 h-4 w-4" /> In biên bản
+              </button>
               <div className="relative">
                 <button 
                   onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
@@ -2788,7 +2807,7 @@ export const AssetList: React.FC = () => {
                         <Download className="mr-3 h-4 w-4" /> Xuất Excel
                       </button>
                       <button onClick={() => { setIsMoreMenuOpen(false); handleExportSelectedPdf(); }} className="w-full text-left px-4 py-3 text-[11px] font-bold hover:bg-[#1E293B] flex items-center text-sky-300">
-                        <FileUp className="mr-3 h-4 w-4" /> Xuất PDF
+                        <FileText className="mr-3 h-4 w-4" /> In biên bản tài sản
                       </button>
 
                       <div className="h-px bg-[#1E293B] my-1"></div>
