@@ -14,7 +14,8 @@ import {
   Briefcase,
   Calendar,
   AlertCircle,
-  FileCheck
+  FileCheck,
+  Printer
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
@@ -126,6 +127,23 @@ export const Liquidation: React.FC = () => {
     }
   };
 
+  const handlePrintLiquidation = async (asset: any) => {
+    const recordId = asset.liquidations?.[0]?.liquidationRecord?.id;
+    if (!recordId) {
+      toast.error('Không tìm thấy hồ sơ thanh lý của tài sản này.');
+      return;
+    }
+
+    try {
+      const response = await api.get(`/operational/liquidation/${recordId}/pdf`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không thể tạo biên bản thanh lý.');
+    }
+  };
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <div className="flex justify-between items-center">
@@ -167,6 +185,7 @@ export const Liquidation: React.FC = () => {
                 <th className="px-6 py-4">Ngày thanh lý</th>
                 <th className="px-6 py-4">Nguyên giá</th>
                 <th className="px-6 py-4">Trạng thái</th>
+                <th className="px-6 py-4 text-right">Biên bản</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -195,11 +214,22 @@ export const Liquidation: React.FC = () => {
                       <FileCheck className="mr-1 h-4 w-4" /> ĐÃ KHÓA
                     </span>
                   </td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      type="button"
+                      onClick={() => handlePrintLiquidation(asset)}
+                      disabled={!asset.liquidations?.[0]?.liquidationRecord?.id}
+                      title="In biên bản thanh lý"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Printer className="h-4 w-4" /> In biên bản
+                    </button>
+                  </td>
                 </tr>
               ))}
               {reports.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-20 text-center text-slate-400 italic">Chưa có tài sản nào được thanh lý.</td>
+                  <td colSpan={6} className="px-6 py-20 text-center text-slate-400 italic">Chưa có tài sản nào được thanh lý.</td>
                 </tr>
               )}
             </tbody>

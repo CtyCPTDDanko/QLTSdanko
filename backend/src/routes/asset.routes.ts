@@ -987,6 +987,15 @@ router.get('/', authenticateToken, requirePermission('ASSET_VIEW'), async (req: 
           select: {
             id: true
           }
+        },
+        liquidations: {
+          include: {
+            liquidationRecord: {
+              select: { id: true, liquidationCode: true, liquidationDate: true }
+            }
+          },
+          orderBy: { id: 'desc' },
+          take: 1
         }
       };
     }

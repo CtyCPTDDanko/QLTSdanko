@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth.middleware';
 import { OperationalService } from '../services/operational.service';
+import prisma from '../utils/prisma';
+import { PdfUtil } from '../utils/pdf.util';
 
 const router = Router();
 
@@ -31,6 +33,35 @@ router.post('/liquidation', authenticateToken, async (req: any, res) => {
     res.json(record);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+// In biên bản theo hồ sơ thanh lý. Một hồ sơ có thể chứa nhiều tài sản.
+router.get('/liquidation/:id/pdf', authenticateToken, async (req: any, res) => {
+  try {
+    const recordId = Number(req.params.id);
+    if (!Number.isInteger(recordId) || recordId <= 0) {
+      return res.status(400).json({ message: 'Mã hồ sơ thanh lý không hợp lệ.' });
+    }
+
+    const record = await prisma.liquidationRecord.findUnique({
+      where: { id: recordId },
+      include: {
+        items: {
+          include: { asset: true },
+          orderBy: { id: 'asc' }
+        }
+      }
+    });
+    if (!record) return res.status(404).json({ message: 'Không tìm thấy hồ sơ thanh lý.' });
+
+    const pdfBuffer = await PdfUtil.generateLiquidationPdf(record);
+    const safeCode = record.liquidationCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=BBTL_${safeCode}.pdf`);
+    res.send(pdfBuffer);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message || 'Không thể tạo biên bản thanh lý.' });
   }
 });
 
