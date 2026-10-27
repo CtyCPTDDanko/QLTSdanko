@@ -36,6 +36,39 @@ router.post('/liquidation', authenticateToken, async (req: any, res) => {
   }
 });
 
+// Danh sách thanh lý lấy trực tiếp từ sổ hồ sơ thanh lý, không suy diễn từ
+// trạng thái hiện tại của tài sản. Nhờ đó ngày, loại và giá trị luôn khớp sổ sách.
+router.get('/liquidation', authenticateToken, async (req: any, res) => {
+  try {
+    const where: any = {};
+    const fromDate = String(req.query.fromDate || '').trim();
+    const toDate = String(req.query.toDate || '').trim();
+    if (fromDate || toDate) {
+      where.liquidationDate = {};
+      if (fromDate) where.liquidationDate.gte = new Date(fromDate);
+      if (toDate) {
+        const endDate = new Date(toDate);
+        endDate.setHours(23, 59, 59, 999);
+        where.liquidationDate.lte = endDate;
+      }
+    }
+
+    const records = await prisma.liquidationRecord.findMany({
+      where,
+      include: {
+        items: {
+          include: { asset: true },
+          orderBy: { id: 'asc' }
+        }
+      },
+      orderBy: [{ liquidationDate: 'desc' }, { id: 'desc' }]
+    });
+    res.json({ records });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message || 'Không thể tải sổ thanh lý.' });
+  }
+});
+
 // In biên bản theo tài sản đã thanh lý. Một hồ sơ có thể chứa nhiều tài sản.
 router.get('/liquidation/asset/:assetId/pdf', authenticateToken, async (req: any, res) => {
   try {

@@ -67,14 +67,19 @@ export const Liquidation: React.FC = () => {
 
   const fetchReports = async () => {
     try {
-      const res = await api.get('/assets', { 
+      const res = await api.get('/operational/liquidation', {
         params: { 
-          status: 'LIQUIDATED',
-          createdFrom: fromDate || undefined,
-          createdTo: toDate || undefined
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined
         } 
       });
-      setReports(res.data.assets);
+      const ledgerRows = (res.data.records || []).flatMap((record: any) =>
+        (record.items || []).map((item: any) => ({
+          ...item.asset,
+          liquidationRecord: record
+        }))
+      );
+      setReports(ledgerRows);
     } catch (err) {
       console.error(err);
     } finally {
@@ -138,6 +143,14 @@ export const Liquidation: React.FC = () => {
     }
   };
 
+  const liquidationTypeLabel = (type?: string) => ({
+    SELL: 'Bán thanh lý',
+    DISPOSE: 'Hủy / bỏ',
+    DONATE: 'Cho tặng',
+    RETURN_SUPPLIER: 'Trả NCC',
+    SCRAP: 'Bán phế liệu'
+  }[String(type || '')] || 'Thanh lý');
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <div className="flex justify-between items-center">
@@ -175,6 +188,7 @@ export const Liquidation: React.FC = () => {
             <thead>
               <tr className="text-[11px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
                 <th className="px-6 py-4">Tài sản</th>
+                <th className="px-6 py-4">Số hồ sơ</th>
                 <th className="px-6 py-4">Loại thanh lý</th>
                 <th className="px-6 py-4">Ngày thanh lý</th>
                 <th className="px-6 py-4">Nguyên giá</th>
@@ -184,7 +198,7 @@ export const Liquidation: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {reports.map((asset) => (
-                <tr key={asset.id} className="hover:bg-slate-50 transition-colors opacity-75">
+                <tr key={`${asset.liquidationRecord?.id}-${asset.id}`} className="hover:bg-slate-50 transition-colors opacity-75">
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center"><Package className="h-5 w-5 text-slate-400" /></div>
@@ -195,10 +209,14 @@ export const Liquidation: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="text-xs font-bold text-slate-600 uppercase">Thanh lý</span>
+                    <p className="text-xs font-bold text-slate-700">{asset.liquidationRecord?.liquidationCode || '---'}</p>
+                    {asset.liquidationRecord?.documentNo && <p className="mt-0.5 text-[10px] text-slate-400">{asset.liquidationRecord.documentNo}</p>}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-xs font-bold text-slate-600 uppercase">{liquidationTypeLabel(asset.liquidationRecord?.liquidationType)}</span>
                   </td>
                   <td className="px-6 py-4 text-sm font-medium text-slate-500">
-                    {format(new Date(asset.updatedAt), 'dd/MM/yyyy')}
+                    {asset.liquidationRecord?.liquidationDate ? format(new Date(asset.liquidationRecord.liquidationDate), 'dd/MM/yyyy') : '---'}
                   </td>
                   <td className="px-6 py-4">
                     <p className="text-sm font-bold text-slate-400 line-through">{asset.purchasePriceExVat?.toLocaleString()} đ</p>
@@ -222,7 +240,7 @@ export const Liquidation: React.FC = () => {
               ))}
               {reports.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-20 text-center text-slate-400 italic">Chưa có tài sản nào được thanh lý.</td>
+                  <td colSpan={7} className="px-6 py-20 text-center text-slate-400 italic">Chưa có hồ sơ thanh lý nào trong sổ sách.</td>
                 </tr>
               )}
             </tbody>
