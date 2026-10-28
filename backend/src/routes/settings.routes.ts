@@ -462,6 +462,145 @@ router.get('/categories/children/:parentId', authenticateToken, async (req, res)
   res.json(sortCategories(categories));
 });
 
+// Export the entire four-level classification tree.  Keeping this on the
+// server means the exported file is an exact snapshot of the master data.
+router.get('/categories/export', authenticateToken, async (_req, res) => {
+  try {
+    const categories = await prisma.assetCategory.findMany({
+      orderBy: [{ level: 'asc' }, { sortOrder: 'asc' }, { code: 'asc' }]
+    });
+    const categoryById = new Map(categories.map((category) => [category.id, category]));
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'QLTS Danko';
+    workbook.created = new Date();
+    const worksheet = workbook.addWorksheet('Phan loai tai san');
+
+    worksheet.columns = [
+      { header: 'Mã cấp 1', key: 'level1Code', width: 14 },
+      { header: 'Tên cấp 1', key: 'level1Name', width: 32 },
+      { header: 'Mã cấp 2', key: 'level2Code', width: 14 },
+      { header: 'Tên cấp 2', key: 'level2Name', width: 32 },
+      { header: 'Mã cấp 3', key: 'level3Code', width: 14 },
+      { header: 'Tên cấp 3', key: 'level3Name', width: 32 },
+      { header: 'Mã cấp 4', key: 'level4Code', width: 14 },
+      { header: 'Tên cấp 4', key: 'level4Name', width: 36 },
+      { header: 'Slug', key: 'slug', width: 30 },
+      { header: 'Trạng thái', key: 'status', width: 16 },
+      { header: 'Thứ tự', key: 'sortOrder', width: 12 }
+    ];
+    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0284C7' } };
+    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+    worksheet.autoFilter = { from: 'A1', to: 'K1' };
+
+    for (const category of categories) {
+      const chain: any[] = [];
+      let current: any | undefined = category;
+      while (current) {
+        chain.unshift(current);
+        current = current.parentId ? categoryById.get(current.parentId) : undefined;
+      }
+      const row: Record<string, string | number> = {
+        slug: category.slug || '',
+        status: category.isActive ? 'Đang hoạt động' : 'Tạm ẩn',
+        sortOrder: category.sortOrder
+      };
+      chain.forEach((item) => {
+        row[`level${item.level}Code`] = item.code;
+        row[`level${item.level}Name`] = item.name;
+      });
+      worksheet.addRow(row);
+    }
+    worksheet.eachRow((row) => {
+      row.alignment = { vertical: 'middle', wrapText: true };
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const fileName = `phan-loai-tai-san-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(Buffer.from(buffer));
+  } catch (error: any) {
+    res.status(500).json({ message: `Không thể xuất danh mục: ${error.message}` });
+  }
+});
+
+// Rebuild the sequence counters from existing asset codes. This deliberately
+// never rewrites an issued asset code; it only ensures the next code generated
+// for each valid classification path continues from the highest used number.
+router.post('/asset-code-rules/run', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const assets = await prisma.asset.findMany({
+      select: {
+        assetCode: true,
+        companyCode: true,
+        level1Code: true,
+        level2Code: true,
+        level3Code: true,
+        level4Code: true,
+        runningNo: true
+      }
+    });
+    const sequences = new Map<string, number>();
+    let skipped = 0;
+
+    for (const asset of assets) {
+      const parts = [asset.companyCode, asset.level1Code, asset.level2Code, asset.level3Code, asset.level4Code]
+        .map((value) => String(value || '').trim());
+      if (parts.some((value) => !value) || !asset.assetCode) {
+        skipped += 1;
+        continue;
+      }
+      const baseCode = parts.join('.');
+      const prefix = `${baseCode}.`;
+      if (!asset.assetCode.startsWith(prefix)) {
+        skipped += 1;
+        continue;
+      }
+      const finalSegment = asset.assetCode.slice(prefix.length);
+      const parsedSequence = Number.parseInt(finalSegment, 10);
+      if (!Number.isInteger(parsedSequence) || parsedSequence < 1) {
+        skipped += 1;
+        continue;
+      }
+      sequences.set(baseCode, Math.max(sequences.get(baseCode) || 0, parsedSequence, asset.runningNo || 0));
+    }
+
+    let updatedCounters = 0;
+    await prisma.$transaction(async (tx) => {
+      for (const [baseCode, lastNumber] of sequences) {
+        const documentType = `ASSET_CODE_${baseCode}`;
+        const existing = await tx.documentCounter.findUnique({ where: { documentType } });
+        if (!existing) {
+          await tx.documentCounter.create({ data: { documentType, lastNumber } });
+          updatedCounters += 1;
+        } else if (existing.lastNumber < lastNumber) {
+          await tx.documentCounter.update({ where: { id: existing.id }, data: { lastNumber } });
+          updatedCounters += 1;
+        }
+      }
+    }, { timeout: 30000 });
+
+    await AuditService.log({
+      entityType: 'ASSET_CODE_RULE',
+      entityId: 0,
+      action: 'UPDATE',
+      details: { processedAssets: assets.length, validPaths: sequences.size, updatedCounters, skipped },
+      performedBy: req.user?.username || 'system'
+    });
+
+    res.json({
+      message: 'Đã đồng bộ quy tắc tạo mã tài sản.',
+      processedAssets: assets.length,
+      validPaths: sequences.size,
+      updatedCounters,
+      skipped
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: `Không thể chạy quy tắc tạo mã: ${error.message}` });
+  }
+});
+
 router.post('/categories', authenticateToken, async (req, res) => {
   const { code, name, slug, level, parentId, sortOrder, isActive } = req.body;
   try {

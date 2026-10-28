@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../lib/api';
 import { toast } from 'react-toastify';
-import { Building2, Plus, ChevronRight, CheckCircle2, XCircle, Info, Hash, Type, Link as LinkIcon, SortAsc, Activity, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { Building2, Plus, ChevronRight, CheckCircle2, XCircle, Info, Hash, Type, Link as LinkIcon, SortAsc, Activity, AlertTriangle, Eye, EyeOff, Download, Play, LoaderCircle } from 'lucide-react';
 
 interface PathItem {
   id: number;
@@ -32,6 +32,9 @@ export const ClassificationSettings: React.FC = () => {
 
   const [isCompModalOpen, setIsCompModalOpen] = useState(false);
   const [compFormData, setCompFormData] = useState({ code: '', name: '' });
+  const [isExporting, setIsExporting] = useState(false);
+  const [isRuleConfirmOpen, setIsRuleConfirmOpen] = useState(false);
+  const [isRunningRules, setIsRunningRules] = useState(false);
 
   const currentLevel = path.length + 1;
   const currentParentId = path.length > 0 ? path[path.length - 1].id : null;
@@ -193,12 +196,64 @@ export const ClassificationSettings: React.FC = () => {
     }
   };
 
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const response = await api.get('/settings/categories/export', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `phan-loai-tai-san-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Đã xuất danh mục phân loại tài sản.');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không thể xuất danh mục phân loại.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleRunAssetCodeRules = async () => {
+    setIsRunningRules(true);
+    try {
+      const response = await api.post('/settings/asset-code-rules/run');
+      const { processedAssets, validPaths, updatedCounters, skipped } = response.data;
+      toast.success(`Đã rà soát ${processedAssets} tài sản, đồng bộ ${updatedCounters}/${validPaths} bộ đếm${skipped ? `; bỏ qua ${skipped} mã không khớp cấu trúc` : ''}.`);
+      setIsRuleConfirmOpen(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không thể chạy quy tắc tạo mã tài sản.');
+    } finally {
+      setIsRunningRules(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-20">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Asset Classification</h1>
           <p className="text-slate-500">Quản lý mã danh mục 4 cấp theo quy trình Master Data.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={isExporting}
+            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-primary-300 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isExporting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            Export Excel
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsRuleConfirmOpen(true)}
+            className="btn-primary inline-flex items-center px-4 py-2.5 text-sm"
+          >
+            <Play className="mr-2 h-4 w-4" /> Chạy quy tắc tạo mã
+          </button>
         </div>
       </div>
 
@@ -532,6 +587,33 @@ export const ClassificationSettings: React.FC = () => {
                 <button type="submit" className="btn-primary px-6 py-2">Save Company</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isRuleConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="clay-surface w-full max-w-lg overflow-hidden rounded-3xl animate-in fade-in zoom-in duration-200">
+            <div className="flex items-start gap-3 border-b border-slate-100 p-6">
+              <div className="rounded-xl bg-primary-50 p-3 text-primary-600"><Hash className="h-6 w-6" /></div>
+              <div>
+                <h2 className="text-lg font-black text-slate-900">Chạy quy tắc tạo mã tài sản</h2>
+                <p className="mt-1 text-sm text-slate-500">Rà soát các mã đã có để chuẩn bị cho lần tạo mã tiếp theo.</p>
+              </div>
+            </div>
+            <div className="space-y-3 p-6 text-sm leading-6 text-slate-600">
+              <p>Hệ thống sẽ đồng bộ số thứ tự cao nhất của từng cấu trúc: <strong className="font-mono text-slate-800">Công ty.Cấp 1.Cấp 2.Cấp 3.Cấp 4.STT</strong>.</p>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800">
+                Thao tác này không đổi mã của tài sản đã phát sinh, chỉ bảo đảm mã tạo mới không bị trùng hoặc nhảy lùi số.
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 p-5">
+              <button type="button" onClick={() => setIsRuleConfirmOpen(false)} disabled={isRunningRules} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 disabled:opacity-60">Hủy</button>
+              <button type="button" onClick={handleRunAssetCodeRules} disabled={isRunningRules} className="btn-primary inline-flex items-center px-5 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60">
+                {isRunningRules ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                {isRunningRules ? 'Đang chạy...' : 'Xác nhận chạy'}
+              </button>
+            </div>
           </div>
         </div>
       )}

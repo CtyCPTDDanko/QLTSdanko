@@ -15,7 +15,9 @@ import {
   Calendar,
   AlertCircle,
   FileCheck,
-  Printer
+  Printer,
+  ArrowDownAZ,
+  ArrowUpAZ
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
@@ -24,6 +26,7 @@ export const Liquidation: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [reports, setReports] = useState<any[]>([]);
   const [selectedReportKeys, setSelectedReportKeys] = useState<string[]>([]);
+  const [assetNameSort, setAssetNameSort] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   
@@ -156,6 +159,13 @@ export const Liquidation: React.FC = () => {
   const getReportKey = (asset: any) => `${asset.liquidationRecord?.id || 'unknown'}-${asset.id}`;
   const selectedReports = reports.filter((asset) => selectedReportKeys.includes(getReportKey(asset)));
   const isAllReportsSelected = reports.length > 0 && selectedReportKeys.length === reports.length;
+  const sortedReports = [...reports].sort((left, right) => {
+    const comparison = String(left.assetName || '').localeCompare(String(right.assetName || ''), 'vi', {
+      sensitivity: 'base',
+      numeric: true
+    });
+    return assetNameSort === 'asc' ? comparison : -comparison;
+  });
 
   const toggleReportSelection = (asset: any) => {
     const key = getReportKey(asset);
@@ -285,7 +295,18 @@ export const Liquidation: React.FC = () => {
                     className="h-4 w-4 cursor-pointer rounded border-slate-300 text-slate-900 focus:ring-slate-500"
                   />
                 </th>
-                <th className="px-6 py-4">Tài sản</th>
+                <th className="px-6 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setAssetNameSort((current) => current === 'asc' ? 'desc' : 'asc')}
+                    className="inline-flex items-center gap-1.5 transition-colors hover:text-slate-700"
+                    title={assetNameSort === 'asc' ? 'Đang sắp xếp A–Z. Bấm để sắp xếp Z–A.' : 'Đang sắp xếp Z–A. Bấm để sắp xếp A–Z.'}
+                  >
+                    Tài sản
+                    {assetNameSort === 'asc' ? <ArrowDownAZ className="h-3.5 w-3.5" /> : <ArrowUpAZ className="h-3.5 w-3.5" />}
+                  </button>
+                </th>
+                <th className="px-6 py-4">Nhóm LV4</th>
                 <th className="px-6 py-4">Số hồ sơ</th>
                 <th className="px-6 py-4">Loại thanh lý</th>
                 <th className="px-6 py-4">Ngày thanh lý</th>
@@ -295,7 +316,7 @@ export const Liquidation: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {reports.map((asset) => (
+              {sortedReports.map((asset) => (
                 <tr key={`${asset.liquidationRecord?.id}-${asset.id}`} className="hover:bg-slate-50 transition-colors opacity-75">
                   <td className="px-4 py-4 text-center">
                     <input
@@ -314,6 +335,10 @@ export const Liquidation: React.FC = () => {
                         <p className="text-xs font-medium text-slate-500">{asset.assetCode}</p>
                       </div>
                     </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="text-xs font-semibold text-slate-600">{asset.level4Name || '---'}</p>
+                    {asset.level4Code && <p className="mt-0.5 text-[10px] font-medium text-slate-400">{asset.level4Code}</p>}
                   </td>
                   <td className="px-6 py-4">
                     <p className="text-xs font-bold text-slate-700">{asset.liquidationRecord?.liquidationCode || '---'}</p>
@@ -347,7 +372,7 @@ export const Liquidation: React.FC = () => {
               ))}
               {reports.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-20 text-center text-slate-400 italic">Chưa có hồ sơ thanh lý nào trong sổ sách.</td>
+                  <td colSpan={9} className="px-6 py-20 text-center text-slate-400 italic">Chưa có hồ sơ thanh lý nào trong sổ sách.</td>
                 </tr>
               )}
             </tbody>
