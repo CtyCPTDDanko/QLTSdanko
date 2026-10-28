@@ -466,9 +466,15 @@ router.get('/categories/children/:parentId', authenticateToken, async (req, res)
 // server means the exported file is an exact snapshot of the master data.
 router.get('/categories/export', authenticateToken, async (_req, res) => {
   try {
-    const categories = await prisma.assetCategory.findMany({
-      orderBy: [{ level: 'asc' }, { sortOrder: 'asc' }, { code: 'asc' }]
-    });
+    const [categories, companies] = await Promise.all([
+      prisma.assetCategory.findMany({
+        orderBy: [{ level: 'asc' }, { sortOrder: 'asc' }, { code: 'asc' }]
+      }),
+      prisma.company.findMany({
+        orderBy: [{ code: 'asc' }],
+        select: { code: true, name: true, status: true, isActive: true }
+      })
+    ]);
     const categoryById = new Map(categories.map((category) => [category.id, category]));
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'QLTS Danko';
@@ -476,6 +482,7 @@ router.get('/categories/export', authenticateToken, async (_req, res) => {
     const worksheet = workbook.addWorksheet('Phan loai tai san');
 
     worksheet.columns = [
+      { key: 'companyScope', width: 24 },
       { key: 'level1Code', width: 14 },
       { key: 'level1Name', width: 32 },
       { key: 'level2Code', width: 14 },
@@ -489,13 +496,13 @@ router.get('/categories/export', authenticateToken, async (_req, res) => {
       { key: 'sortOrder', width: 12 }
     ];
     worksheet.addRow([
-      'Mã cấp 1', 'Tên cấp 1', 'Mã cấp 2', 'Tên cấp 2', 'Mã cấp 3', 'Tên cấp 3',
+      'Công ty áp dụng', 'Mã cấp 1', 'Tên cấp 1', 'Mã cấp 2', 'Tên cấp 2', 'Mã cấp 3', 'Tên cấp 3',
       'Mã cấp 4', 'Tên cấp 4', 'Slug', 'Trạng thái', 'Thứ tự'
     ]);
     worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
     worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0284C7' } };
     worksheet.views = [{ state: 'frozen', ySplit: 1 }];
-    worksheet.autoFilter = { from: 'A1', to: 'K1' };
+    worksheet.autoFilter = { from: 'A1', to: 'L1' };
 
     for (const category of categories) {
       const chain: any[] = [];
@@ -505,6 +512,7 @@ router.get('/categories/export', authenticateToken, async (_req, res) => {
         current = current.parentId ? categoryById.get(current.parentId) : undefined;
       }
       const row: Record<string, string | number> = {
+        companyScope: 'Tất cả công ty',
         slug: category.slug || '',
         status: category.isActive ? 'Đang hoạt động' : 'Tạm ẩn',
         sortOrder: category.sortOrder
@@ -517,6 +525,25 @@ router.get('/categories/export', authenticateToken, async (_req, res) => {
     }
     worksheet.eachRow((row) => {
       row.alignment = { vertical: 'middle', wrapText: true };
+    });
+
+    const companyWorksheet = workbook.addWorksheet('Danh sach cong ty');
+    companyWorksheet.columns = [
+      { key: 'code', width: 16 },
+      { key: 'name', width: 42 },
+      { key: 'status', width: 20 }
+    ];
+    companyWorksheet.addRow(['Mã công ty', 'Tên công ty', 'Trạng thái']);
+    companyWorksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    companyWorksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0284C7' } };
+    companyWorksheet.views = [{ state: 'frozen', ySplit: 1 }];
+    companyWorksheet.autoFilter = { from: 'A1', to: 'C1' };
+    companies.forEach((company) => {
+      companyWorksheet.addRow({
+        code: company.code,
+        name: company.name,
+        status: company.isActive && company.status === 'ACTIVE' ? 'Đang hoạt động' : company.status
+      });
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
