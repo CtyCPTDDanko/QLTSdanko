@@ -200,14 +200,21 @@ export const ClassificationSettings: React.FC = () => {
     setIsExporting(true);
     try {
       const response = await api.get('/settings/categories/export', { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const file = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      if (file.size === 0) {
+        throw new Error('Tệp xuất không có dữ liệu.');
+      }
+      const url = window.URL.createObjectURL(file);
       const link = document.createElement('a');
       link.href = url;
       link.download = `phan-loai-tai-san-${new Date().toISOString().slice(0, 10)}.xlsx`;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(url);
+      // Keep the object URL alive until the browser has finished reading it.
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 2000);
       toast.success('Đã xuất danh mục phân loại tài sản.');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Không thể xuất danh mục phân loại.');

@@ -476,18 +476,22 @@ router.get('/categories/export', authenticateToken, async (_req, res) => {
     const worksheet = workbook.addWorksheet('Phan loai tai san');
 
     worksheet.columns = [
-      { header: 'Mã cấp 1', key: 'level1Code', width: 14 },
-      { header: 'Tên cấp 1', key: 'level1Name', width: 32 },
-      { header: 'Mã cấp 2', key: 'level2Code', width: 14 },
-      { header: 'Tên cấp 2', key: 'level2Name', width: 32 },
-      { header: 'Mã cấp 3', key: 'level3Code', width: 14 },
-      { header: 'Tên cấp 3', key: 'level3Name', width: 32 },
-      { header: 'Mã cấp 4', key: 'level4Code', width: 14 },
-      { header: 'Tên cấp 4', key: 'level4Name', width: 36 },
-      { header: 'Slug', key: 'slug', width: 30 },
-      { header: 'Trạng thái', key: 'status', width: 16 },
-      { header: 'Thứ tự', key: 'sortOrder', width: 12 }
+      { key: 'level1Code', width: 14 },
+      { key: 'level1Name', width: 32 },
+      { key: 'level2Code', width: 14 },
+      { key: 'level2Name', width: 32 },
+      { key: 'level3Code', width: 14 },
+      { key: 'level3Name', width: 32 },
+      { key: 'level4Code', width: 14 },
+      { key: 'level4Name', width: 36 },
+      { key: 'slug', width: 30 },
+      { key: 'status', width: 16 },
+      { key: 'sortOrder', width: 12 }
     ];
+    worksheet.addRow([
+      'Mã cấp 1', 'Tên cấp 1', 'Mã cấp 2', 'Tên cấp 2', 'Mã cấp 3', 'Tên cấp 3',
+      'Mã cấp 4', 'Tên cấp 4', 'Slug', 'Trạng thái', 'Thứ tự'
+    ]);
     worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
     worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0284C7' } };
     worksheet.views = [{ state: 'frozen', ySplit: 1 }];
