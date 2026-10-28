@@ -33,6 +33,7 @@ export const ClassificationSettings: React.FC = () => {
   const [isCompModalOpen, setIsCompModalOpen] = useState(false);
   const [compFormData, setCompFormData] = useState({ code: '', name: '' });
   const [isExporting, setIsExporting] = useState(false);
+  const [isCompaniesExporting, setIsCompaniesExporting] = useState(false);
   const [isRuleConfirmOpen, setIsRuleConfirmOpen] = useState(false);
   const [isRunningRules, setIsRunningRules] = useState(false);
 
@@ -223,6 +224,30 @@ export const ClassificationSettings: React.FC = () => {
     }
   };
 
+  const handleCompaniesExport = async () => {
+    setIsCompaniesExporting(true);
+    try {
+      const response = await api.get('/settings/companies/export', { responseType: 'blob' });
+      const file = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      if (file.size === 0) throw new Error('Tệp xuất không có dữ liệu.');
+      const url = window.URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `companies-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 2000);
+      toast.success('Đã xuất danh sách Companies.');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không thể xuất danh sách Companies.');
+    } finally {
+      setIsCompaniesExporting(false);
+    }
+  };
+
   const handleRunAssetCodeRules = async () => {
     setIsRunningRules(true);
     try {
@@ -271,9 +296,21 @@ export const ClassificationSettings: React.FC = () => {
               <h2 className="text-lg font-bold flex items-center">
                 <Building2 className="mr-2 h-5 w-5 text-primary-600" /> Companies
               </h2>
-              <button onClick={() => setIsCompModalOpen(true)} className="p-2 hover:bg-slate-100 rounded-lg text-primary-600">
-                <Plus className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handleCompaniesExport}
+                  disabled={isCompaniesExporting}
+                  className="p-2 hover:bg-slate-100 rounded-lg text-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  title="Xuất Excel Companies"
+                  aria-label="Xuất Excel Companies"
+                >
+                  {isCompaniesExporting ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+                </button>
+                <button onClick={() => setIsCompModalOpen(true)} className="p-2 hover:bg-slate-100 rounded-lg text-primary-600" title="Thêm công ty">
+                  <Plus className="h-5 w-5" />
+                </button>
+              </div>
             </div>
             <div className="space-y-3">
               {companies.map(c => {

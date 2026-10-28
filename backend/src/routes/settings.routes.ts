@@ -201,6 +201,79 @@ router.get('/companies/active', authenticateToken, async (req, res) => {
   res.json(companies);
 });
 
+router.get('/companies/export', authenticateToken, async (_req, res) => {
+  try {
+    const [companies, assetStats] = await Promise.all([
+      prisma.company.findMany({
+        include: { parent: { select: { code: true, name: true } } },
+        orderBy: { code: 'asc' }
+      }),
+      prisma.asset.groupBy({
+        by: ['companyCode'],
+        _count: { id: true },
+        _sum: { purchasePriceExVat: true },
+        where: { isDeleted: false }
+      })
+    ]);
+    const statsByCompanyCode = new Map(assetStats.map((stat) => [stat.companyCode, {
+      count: stat._count.id || 0,
+      value: stat._sum.purchasePriceExVat || 0
+    }]));
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'QLTS Danko';
+    workbook.created = new Date();
+    const worksheet = workbook.addWorksheet('Companies', { views: [{ showGridLines: false, state: 'frozen', ySplit: 5 }] });
+    const headers = [
+      'Mã công ty', 'Tên công ty', 'Loại', 'Công ty cha', 'Mã số thuế', 'Địa chỉ',
+      'Trạng thái', 'Số tài sản', 'Tổng nguyên giá', 'Người tạo', 'Ngày tạo'
+    ];
+    worksheet.columns = [
+      { width: 16 }, { width: 36 }, { width: 18 }, { width: 30 }, { width: 18 }, { width: 38 },
+      { width: 18 }, { width: 14 }, { width: 20 }, { width: 20 }, { width: 16 }
+    ];
+    worksheet.mergeCells('A2:K2');
+    worksheet.getCell('A2').value = 'DANH SÁCH CÔNG TY';
+    worksheet.getCell('A2').font = { bold: true, size: 16, color: { argb: 'FF0F172A' } };
+    worksheet.getCell('A2').alignment = { vertical: 'middle' };
+    worksheet.getRow(2).height = 29;
+    worksheet.mergeCells('A3:K3');
+    worksheet.getCell('A3').value = 'Danh mục công ty, đơn vị trực thuộc và số liệu tài sản đang quản lý.';
+    worksheet.getCell('A3').font = { italic: true, size: 10, color: { argb: 'FF64748B' } };
+    worksheet.getCell('A3').alignment = { vertical: 'middle' };
+    worksheet.getRow(3).height = 23;
+    worksheet.addTable({
+      name: 'CompanyList',
+      ref: 'A5',
+      headerRow: true,
+      style: { theme: 'TableStyleMedium2', showRowStripes: true },
+      columns: headers.map((name) => ({ name })),
+      rows: companies.map((company) => {
+        const stats = statsByCompanyCode.get(company.code) || { count: 0, value: 0 };
+        return [
+          company.code, company.name, company.type, company.parent ? `${company.parent.code} - ${company.parent.name}` : '',
+          company.taxCode || '', company.address || '', company.isActive ? company.status : 'INACTIVE',
+          stats.count, stats.value, company.createdBy || '', company.createdAt
+        ];
+      })
+    });
+    worksheet.getRow(5).height = 28;
+    worksheet.eachRow((row, rowNumber) => {
+      row.alignment = { vertical: 'middle', wrapText: true };
+      if (rowNumber > 5) row.height = 22;
+    });
+    worksheet.getColumn(9).numFmt = '#,##0';
+    worksheet.getColumn(11).numFmt = 'dd/mm/yyyy';
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const fileName = `companies-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(Buffer.from(buffer));
+  } catch (error: any) {
+    res.status(500).json({ message: `Không thể xuất danh sách công ty: ${error.message}` });
+  }
+});
+
 router.get('/companies/:id', authenticateToken, async (req, res) => {
   try {
     const company = await prisma.company.findUnique({
