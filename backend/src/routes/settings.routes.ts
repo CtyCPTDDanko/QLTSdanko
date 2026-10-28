@@ -466,45 +466,14 @@ router.get('/categories/children/:parentId', authenticateToken, async (req, res)
 // server means the exported file is an exact snapshot of the master data.
 router.get('/categories/export', authenticateToken, async (_req, res) => {
   try {
-    const [categories, companies] = await Promise.all([
-      prisma.assetCategory.findMany({
-        orderBy: [{ level: 'asc' }, { sortOrder: 'asc' }, { code: 'asc' }]
-      }),
-      prisma.company.findMany({
-        orderBy: [{ code: 'asc' }],
-        select: { code: true, name: true, status: true, isActive: true }
-      })
-    ]);
+    const categories = await prisma.assetCategory.findMany({
+      orderBy: [{ level: 'asc' }, { sortOrder: 'asc' }, { code: 'asc' }]
+    });
     const categoryById = new Map(categories.map((category) => [category.id, category]));
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'QLTS Danko';
     workbook.created = new Date();
-    const worksheet = workbook.addWorksheet('Phan loai tai san');
-
-    worksheet.columns = [
-      { key: 'companyScope', width: 24 },
-      { key: 'level1Code', width: 14 },
-      { key: 'level1Name', width: 32 },
-      { key: 'level2Code', width: 14 },
-      { key: 'level2Name', width: 32 },
-      { key: 'level3Code', width: 14 },
-      { key: 'level3Name', width: 32 },
-      { key: 'level4Code', width: 14 },
-      { key: 'level4Name', width: 36 },
-      { key: 'slug', width: 30 },
-      { key: 'status', width: 16 },
-      { key: 'sortOrder', width: 12 }
-    ];
-    worksheet.addRow([
-      'Công ty áp dụng', 'Mã cấp 1', 'Tên cấp 1', 'Mã cấp 2', 'Tên cấp 2', 'Mã cấp 3', 'Tên cấp 3',
-      'Mã cấp 4', 'Tên cấp 4', 'Slug', 'Trạng thái', 'Thứ tự'
-    ]);
-    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0284C7' } };
-    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
-    worksheet.autoFilter = { from: 'A1', to: 'L1' };
-
-    for (const category of categories) {
+    const exportRows = categories.map((category) => {
       const chain: any[] = [];
       let current: any | undefined = category;
       while (current) {
@@ -512,6 +481,9 @@ router.get('/categories/export', authenticateToken, async (_req, res) => {
         current = current.parentId ? categoryById.get(current.parentId) : undefined;
       }
       const row: Record<string, string | number> = {
+        fullCode: chain.map((item) => item.code).join('.'),
+        categoryName: category.name,
+        level: category.level,
         companyScope: 'Tất cả công ty',
         slug: category.slug || '',
         status: category.isActive ? 'Đang hoạt động' : 'Tạm ẩn',
@@ -521,30 +493,70 @@ router.get('/categories/export', authenticateToken, async (_req, res) => {
         row[`level${item.level}Code`] = item.code;
         row[`level${item.level}Name`] = item.name;
       });
-      worksheet.addRow(row);
-    }
+      return row;
+    });
+
+    const worksheet = workbook.addWorksheet('Tra cứu tài sản', { views: [{ showGridLines: false, state: 'frozen', ySplit: 5 }] });
+    const lookupHeaders = [
+      'Mã phân loại', 'Tên tài sản / nhóm tài sản', 'Cấp phân loại', 'Nhóm cấp 1', 'Nhóm cấp 2',
+      'Nhóm cấp 3', 'Nhóm cấp 4', 'Công ty áp dụng', 'Trạng thái'
+    ];
+    worksheet.columns = [
+      { width: 20 }, { width: 42 }, { width: 16 }, { width: 34 }, { width: 38 },
+      { width: 34 }, { width: 44 }, { width: 24 }, { width: 21 }
+    ];
+    worksheet.mergeCells('A2:I2');
+    worksheet.getCell('A2').value = 'DANH MỤC PHÂN LOẠI TÀI SẢN';
+    worksheet.getCell('A2').font = { bold: true, size: 16, color: { argb: 'FF0F172A' } };
+    worksheet.getCell('A2').alignment = { vertical: 'middle' };
+    worksheet.getRow(2).height = 29;
+    worksheet.mergeCells('A3:I3');
+    worksheet.getCell('A3').value = 'Tra cứu theo tên hoặc mã phân loại. Mã đầy đủ thể hiện thứ tự từ cấp 1 đến cấp hiện tại.';
+    worksheet.getCell('A3').font = { italic: true, size: 10, color: { argb: 'FF64748B' } };
+    worksheet.getCell('A3').alignment = { vertical: 'middle' };
+    worksheet.getRow(3).height = 23;
+    worksheet.addTable({
+      name: 'AssetClassificationLookup',
+      ref: 'A5',
+      headerRow: true,
+      style: { theme: 'TableStyleMedium2', showRowStripes: true },
+      columns: lookupHeaders.map((name) => ({ name })),
+      rows: exportRows.map((row) => [
+        row.fullCode, row.categoryName, row.level, row.level1Name || '', row.level2Name || '',
+        row.level3Name || '', row.level4Name || '', row.companyScope, row.status
+      ])
+    });
+    worksheet.getRow(5).height = 28;
     worksheet.eachRow((row) => {
       row.alignment = { vertical: 'middle', wrapText: true };
     });
+    for (let index = 6; index <= exportRows.length + 5; index += 1) worksheet.getRow(index).height = 23;
 
-    const companyWorksheet = workbook.addWorksheet('Danh sach cong ty');
-    companyWorksheet.columns = [
-      { key: 'code', width: 16 },
-      { key: 'name', width: 42 },
-      { key: 'status', width: 20 }
+    const rawDataWorksheet = workbook.addWorksheet('Dữ liệu gốc', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const rawHeaders = [
+      'Công ty áp dụng', 'Mã cấp 1', 'Tên cấp 1', 'Mã cấp 2', 'Tên cấp 2', 'Mã cấp 3', 'Tên cấp 3',
+      'Mã cấp 4', 'Tên cấp 4', 'Slug', 'Trạng thái', 'Thứ tự'
     ];
-    companyWorksheet.addRow(['Mã công ty', 'Tên công ty', 'Trạng thái']);
-    companyWorksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    companyWorksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0284C7' } };
-    companyWorksheet.views = [{ state: 'frozen', ySplit: 1 }];
-    companyWorksheet.autoFilter = { from: 'A1', to: 'C1' };
-    companies.forEach((company) => {
-      companyWorksheet.addRow({
-        code: company.code,
-        name: company.name,
-        status: company.isActive && company.status === 'ACTIVE' ? 'Đang hoạt động' : company.status
-      });
+    rawDataWorksheet.columns = [
+      { width: 24 }, { width: 14 }, { width: 32 }, { width: 14 }, { width: 32 }, { width: 14 },
+      { width: 32 }, { width: 14 }, { width: 36 }, { width: 30 }, { width: 16 }, { width: 12 }
+    ];
+    rawDataWorksheet.addTable({
+      name: 'AssetClassificationRawData',
+      ref: 'A1',
+      headerRow: true,
+      style: { theme: 'TableStyleMedium2', showRowStripes: true },
+      columns: rawHeaders.map((name) => ({ name })),
+      rows: exportRows.map((row) => [
+        row.companyScope, row.level1Code || '', row.level1Name || '', row.level2Code || '', row.level2Name || '',
+        row.level3Code || '', row.level3Name || '', row.level4Code || '', row.level4Name || '', row.slug,
+        row.status, row.sortOrder
+      ])
     });
+    rawDataWorksheet.eachRow((row) => {
+      row.alignment = { vertical: 'middle', wrapText: true };
+    });
+    for (let index = 2; index <= exportRows.length + 1; index += 1) rawDataWorksheet.getRow(index).height = 22;
 
     const buffer = await workbook.xlsx.writeBuffer();
     const fileName = `phan-loai-tai-san-${new Date().toISOString().slice(0, 10)}.xlsx`;
