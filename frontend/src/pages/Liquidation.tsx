@@ -31,6 +31,16 @@ export const Liquidation: React.FC = () => {
   const [reports, setReports] = useState<any[]>([]);
   const [selectedReportKeys, setSelectedReportKeys] = useState<string[]>([]);
   const [minutesAssets, setMinutesAssets] = useState<any[] | null>(null);
+  const [filters, setFilters] = useState({
+    search: '',
+    level4: '',
+    liquidationType: '',
+    status: '',
+    fromDate: '',
+    toDate: '',
+    minPrice: '',
+    maxPrice: ''
+  });
   const [reportSort, setReportSort] = useState<{ key: LiquidationSortKey; direction: 'asc' | 'desc' }>({
     key: 'asset',
     direction: 'asc'
@@ -159,8 +169,29 @@ export const Liquidation: React.FC = () => {
   }[String(type || '')] || 'Thanh lý');
 
   const getReportKey = (asset: any) => `${asset.liquidationRecord?.id || 'unknown'}-${asset.id}`;
+  const level4Options = Array.from(new Set(reports.map((asset) => asset.level4Name).filter(Boolean))).sort((left, right) => left.localeCompare(right, 'vi'));
+  const filteredReports = reports.filter((asset) => {
+    const normalizedSearch = filters.search.trim().toLocaleLowerCase('vi');
+    const record = asset.liquidationRecord || {};
+    const searchable = [asset.assetCode, asset.assetName, asset.level4Name, record.liquidationCode, record.documentNo]
+      .filter(Boolean)
+      .join(' ')
+      .toLocaleLowerCase('vi');
+    if (normalizedSearch && !searchable.includes(normalizedSearch)) return false;
+    if (filters.level4 && asset.level4Name !== filters.level4) return false;
+    if (filters.liquidationType && record.liquidationType !== filters.liquidationType) return false;
+    if (filters.status === 'LOCKED' && !asset.isLocked) return false;
+    if (filters.status === 'UNLOCKED' && asset.isLocked) return false;
+    const liquidationDate = record.liquidationDate ? new Date(record.liquidationDate) : null;
+    if (filters.fromDate && (!liquidationDate || liquidationDate < new Date(`${filters.fromDate}T00:00:00`))) return false;
+    if (filters.toDate && (!liquidationDate || liquidationDate > new Date(`${filters.toDate}T23:59:59`))) return false;
+    const price = Number(asset.purchasePriceExVat || 0);
+    if (filters.minPrice !== '' && price < Number(filters.minPrice)) return false;
+    if (filters.maxPrice !== '' && price > Number(filters.maxPrice)) return false;
+    return true;
+  });
   const selectedReports = reports.filter((asset) => selectedReportKeys.includes(getReportKey(asset)));
-  const isAllReportsSelected = reports.length > 0 && selectedReportKeys.length === reports.length;
+  const isAllReportsSelected = filteredReports.length > 0 && filteredReports.every((asset) => selectedReportKeys.includes(getReportKey(asset)));
   const toggleReportSort = (key: LiquidationSortKey) => {
     setReportSort((current) => current.key === key
       ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
@@ -179,7 +210,7 @@ export const Liquidation: React.FC = () => {
     }
   };
 
-  const sortedReports = [...reports].sort((left, right) => {
+  const sortedReports = [...filteredReports].sort((left, right) => {
     const leftValue = getReportSortValue(left, reportSort.key);
     const rightValue = getReportSortValue(right, reportSort.key);
     const comparison = typeof leftValue === 'number' && typeof rightValue === 'number'
@@ -216,8 +247,12 @@ export const Liquidation: React.FC = () => {
   };
 
   const toggleAllReportSelection = () => {
-    setSelectedReportKeys(isAllReportsSelected ? [] : reports.map(getReportKey));
+    setSelectedReportKeys((current) => isAllReportsSelected
+      ? current.filter((key) => !filteredReports.some((asset) => getReportKey(asset) === key))
+      : Array.from(new Set([...current, ...filteredReports.map(getReportKey)])));
   };
+
+  const clearFilters = () => setFilters({ search: '', level4: '', liquidationType: '', status: '', fromDate: '', toDate: '', minPrice: '', maxPrice: '' });
 
   const handlePrintSelectedReports = () => {
     if (selectedReports.length === 0) return;
@@ -264,6 +299,36 @@ export const Liquidation: React.FC = () => {
             </button>
           )}
         </div>
+
+        <div className="grid grid-cols-1 gap-3 border-b border-slate-100 bg-white p-4 md:grid-cols-2 xl:grid-cols-4">
+          <label className="relative block xl:col-span-2">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={filters.search}
+              onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+              placeholder="Tìm mã, tên tài sản hoặc số hồ sơ..."
+              className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-slate-400"
+            />
+          </label>
+          <select value={filters.level4} onChange={(event) => setFilters((current) => ({ ...current, level4: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400">
+            <option value="">Tất cả nhóm LV4</option>
+            {level4Options.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+          <select value={filters.liquidationType} onChange={(event) => setFilters((current) => ({ ...current, liquidationType: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400">
+            <option value="">Tất cả loại thanh lý</option>
+            <option value="SELL">Bán thanh lý</option>
+            <option value="DISPOSE">Hủy / bỏ</option>
+            <option value="DONATE">Cho tặng</option>
+            <option value="RETURN_SUPPLIER">Trả NCC</option>
+            <option value="SCRAP">Bán phế liệu</option>
+          </select>
+          <label className="text-xs font-bold text-slate-500">Từ ngày<input type="date" value={filters.fromDate} onChange={(event) => setFilters((current) => ({ ...current, fromDate: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus:border-slate-400" /></label>
+          <label className="text-xs font-bold text-slate-500">Đến ngày<input type="date" value={filters.toDate} onChange={(event) => setFilters((current) => ({ ...current, toDate: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus:border-slate-400" /></label>
+          <label className="text-xs font-bold text-slate-500">Nguyên giá từ<input type="number" min="0" value={filters.minPrice} onChange={(event) => setFilters((current) => ({ ...current, minPrice: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus:border-slate-400" /></label>
+          <label className="text-xs font-bold text-slate-500">Nguyên giá đến<input type="number" min="0" value={filters.maxPrice} onChange={(event) => setFilters((current) => ({ ...current, maxPrice: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus:border-slate-400" /></label>
+          <div className="flex items-end gap-2"><select value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400"><option value="">Mọi trạng thái</option><option value="LOCKED">Đã khóa</option><option value="UNLOCKED">Chưa khóa</option></select><button type="button" onClick={clearFilters} className="rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50">Xóa lọc</button></div>
+        </div>
+        <div className="border-b border-slate-100 bg-slate-50 px-6 py-2 text-xs font-medium text-slate-500">Hiển thị {filteredReports.length}/{reports.length} tài sản</div>
         
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -346,6 +411,11 @@ export const Liquidation: React.FC = () => {
               {reports.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-6 py-20 text-center text-slate-400 italic">Chưa có hồ sơ thanh lý nào trong sổ sách.</td>
+                </tr>
+              )}
+              {reports.length > 0 && sortedReports.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-6 py-20 text-center text-slate-400 italic">Không có tài sản phù hợp với bộ lọc.</td>
                 </tr>
               )}
             </tbody>
