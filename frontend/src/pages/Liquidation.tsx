@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../lib/api';
 import { DateRangeModal } from '../components/DateRangeModal';
+import { LiquidationMinutesModal } from '../components/LiquidationMinutesModal';
 import { 
   Trash2, 
   Plus, 
@@ -29,6 +30,7 @@ export const Liquidation: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [reports, setReports] = useState<any[]>([]);
   const [selectedReportKeys, setSelectedReportKeys] = useState<string[]>([]);
+  const [minutesAssets, setMinutesAssets] = useState<any[] | null>(null);
   const [reportSort, setReportSort] = useState<{ key: LiquidationSortKey; direction: 'asc' | 'desc' }>({
     key: 'asset',
     direction: 'asc'
@@ -144,14 +146,8 @@ export const Liquidation: React.FC = () => {
   };
 
   const handlePrintLiquidation = async (asset: any) => {
-    try {
-      const response = await api.get(`/operational/liquidation/asset/${asset.id}/pdf`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
-      window.open(url, '_blank', 'noopener,noreferrer');
-      window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Không thể tạo biên bản thanh lý.');
-    }
+    const recordId = asset.liquidationRecord?.id;
+    setMinutesAssets(recordId ? reports.filter((item) => item.liquidationRecord?.id === recordId) : [asset]);
   };
 
   const liquidationTypeLabel = (type?: string) => ({
@@ -225,65 +221,7 @@ export const Liquidation: React.FC = () => {
 
   const handlePrintSelectedReports = () => {
     if (selectedReports.length === 0) return;
-
-    const escapeHtml = (value: unknown) => String(value ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-    const rows = selectedReports.map((asset, index) => `
-      <tr>
-        <td>${index + 1}</td>
-        <td>${escapeHtml(asset.liquidationRecord?.liquidationCode || '---')}</td>
-        <td>${escapeHtml(asset.assetCode)}</td>
-        <td>${escapeHtml(asset.assetName)}</td>
-        <td>${escapeHtml(liquidationTypeLabel(asset.liquidationRecord?.liquidationType))}</td>
-        <td>${asset.liquidationRecord?.liquidationDate ? escapeHtml(format(new Date(asset.liquidationRecord.liquidationDate), 'dd/MM/yyyy')) : '---'}</td>
-        <td>${escapeHtml(Number(asset.purchasePriceExVat || 0).toLocaleString('vi-VN'))} đ</td>
-      </tr>
-    `).join('');
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Trình duyệt đang chặn cửa sổ in. Vui lòng cho phép popup rồi thử lại.');
-      return;
-    }
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Danh sách tài sản thanh lý đã chọn</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
-            h1 { font-size: 18px; margin: 0 0 8px; text-transform: uppercase; text-align: center; }
-            .subtitle { text-align: center; font-size: 12px; margin-bottom: 24px; color: #475569; }
-            p { margin: 0 0 16px; font-size: 12px; color: #334155; line-height: 1.55; }
-            table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-            th, td { border: 1px solid #94a3b8; padding: 6px; text-align: left; vertical-align: top; }
-            th { background: #f1f5f9; text-transform: uppercase; font-size: 9.5px; }
-            .signatures { display: flex; justify-content: space-between; gap: 24px; margin-top: 52px; text-align: center; font-size: 12px; font-weight: 700; }
-            .signatures span { display: block; margin-top: 5px; font-size: 11px; color: #475569; font-style: italic; font-weight: 400; }
-          </style>
-        </head>
-        <body>
-          <h1>Danh sách tài sản thanh lý đã chọn</h1>
-          <p class="subtitle">Số lượng: ${selectedReports.length} tài sản • Ngày lập: ${new Date().toLocaleString('vi-VN')}</p>
-          <p>Danh sách được trích từ sổ thanh lý tài sản để phục vụ đối chiếu và ký xác nhận nội bộ.</p>
-          <table>
-            <thead><tr><th>STT</th><th>Mã hồ sơ</th><th>Mã tài sản</th><th>Tên tài sản</th><th>Loại thanh lý</th><th>Ngày thanh lý</th><th>Nguyên giá</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-          <div class="signatures">
-            <div>NGƯỜI LẬP<span>(Ký, ghi rõ họ tên)</span></div>
-            <div>ĐẠI DIỆN BỘ PHẬN QLTS<span>(Ký, ghi rõ họ tên)</span></div>
-            <div>HỘI ĐỒNG THANH LÝ<span>(Ký, ghi rõ họ tên)</span></div>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    setMinutesAssets(selectedReports);
   };
 
   return (
@@ -322,7 +260,7 @@ export const Liquidation: React.FC = () => {
               onClick={handlePrintSelectedReports}
               className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-black"
             >
-              <Printer className="h-4 w-4" /> In danh sách đã chọn ({selectedReports.length})
+              <Printer className="h-4 w-4" /> In biên bản thanh lý ({selectedReports.length})
             </button>
           )}
         </div>
@@ -562,6 +500,12 @@ export const Liquidation: React.FC = () => {
         onConfirm={handleExportLiquidated}
         title="Tải báo cáo Thanh lý tài sản"
       />
+      {minutesAssets && (
+        <LiquidationMinutesModal
+          assets={minutesAssets}
+          onClose={() => setMinutesAssets(null)}
+        />
+      )}
     </div>
   );
 };
