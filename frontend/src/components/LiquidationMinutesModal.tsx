@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { FileDown, Printer, X } from 'lucide-react';
+import dankoGroupLogo from '../assets/danko-group-logo.png';
 
 type Asset = Record<string, any>;
 
@@ -85,6 +86,7 @@ export const LiquidationMinutesModal: React.FC<Props> = ({ assets, onClose }) =>
   };
 
   const openPrintWindow = () => {
+    const logoUrl = new URL(dankoGroupLogo, window.location.origin).href;
     const rows = preparedAssets.map((asset, index) => `
       <tr>
         <td class="center">${index + 1}</td>
@@ -102,14 +104,14 @@ export const LiquidationMinutesModal: React.FC<Props> = ({ assets, onClose }) =>
     printWindow.document.write(`<!doctype html><html><head><title>Biên bản thanh lý tài sản</title><style>
       @page { size: A4 portrait; margin: 13mm; }
       * { box-sizing: border-box; } body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #000; margin: 0; }
-      .header { display:flex; justify-content:space-between; align-items:flex-start; } .brand { color:#1f4d99; font: bold 22pt Arial, sans-serif; } .brand small { display:block; color:#e23b44; font-size:7pt; letter-spacing:2px; text-align:right; } .form { font-size:10pt; font-weight:bold; font-style:italic; }
+      .header { display:flex; justify-content:space-between; align-items:flex-start; } .brand-logo { display:block; width:118px; height:auto; object-fit:contain; } .form { font-size:10pt; font-weight:bold; font-style:italic; }
       h1 { font-size:16pt; text-align:center; margin: 12px 0 1px; } .number { text-align:center; font-style:italic; margin-bottom:12px; }
       p { margin:3px 0; line-height:1.25; } .department { display:inline-block; min-width:45%; margin-left:14px; } .section { font-weight:bold; margin-top:6px; }
       table { border-collapse:collapse; width:100%; margin-top:3px; font-size:9.2pt; } thead { display:table-header-group; } tr { break-inside:avoid; page-break-inside:avoid; } th, td { border:0.7px solid #111; padding:4px 3px; vertical-align:top; } th { text-align:center; font-weight:bold; } .center { text-align:center; } .money { text-align:right; white-space:nowrap; }
       .post { margin-top:7px; } .line { border-bottom: 1px dotted #333; min-height:19px; } .date { margin-top:18px; text-align:right; font-style:italic; } .signatures { display:flex; justify-content:space-between; gap:16px; margin-top:12px; text-align:center; font-weight:bold; } .signatures > div { width:33%; min-height:78px; } .signatures em { display:block; margin-top:3px; font-weight:normal; font-size:10pt; }
       .footer { position:fixed; bottom:4mm; left:0; right:0; text-align:center; font-size:8pt; color:#555; } 
     </style></head><body>
-      <div class="header"><div class="brand">DANKO<small>GROUP</small></div><div class="form">Mẫu số: BM04/QLTS</div></div>
+      <div class="header"><img class="brand-logo" src="${escapeHtml(logoUrl)}" alt="DANKO GROUP"><div class="form">Mẫu số: BM04/QLTS</div></div>
       <h1>BIÊN BẢN THANH LÝ TÀI SẢN</h1><div class="number">Số: ${escapeHtml(documentNo || '...... / BBTLTS')}</div>
       <p>Hôm nay, ngày ${escapeHtml(formatDate(documentDate))} tại ${escapeHtml(location || '........................................................')}.</p>
       <p>Chúng tôi gồm:</p><p>${attendeeLines}</p><p>Cùng tiến hành thanh lý tài sản với nội dung như sau:</p>
@@ -142,7 +144,7 @@ export const LiquidationMinutesModal: React.FC<Props> = ({ assets, onClose }) =>
               <div className="grid grid-cols-2 gap-2"><label className="block text-xs font-bold text-slate-600">Chi phí thanh lý<input inputMode="numeric" value={liquidationCost} onChange={(event) => setLiquidationCost(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label><label className="block text-xs font-bold text-slate-600">Giá trị thu hồi<input inputMode="numeric" value={recoveryValue} onChange={(event) => setRecoveryValue(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label></div>
             </section>
             <section className="bg-slate-200 p-4 sm:p-7"><div className="mx-auto max-w-[794px] bg-white px-6 py-5 text-[11px] font-serif text-slate-950 shadow-sm sm:px-9">
-              <div className="flex justify-between"><div className="text-xl font-bold tracking-tight text-blue-800">DANKO<span className="block text-right text-[7px] tracking-[0.25em] text-red-500">GROUP</span></div><div className="pt-1 text-xs font-bold italic">Mẫu số: BM04/QLTS</div></div>
+              <div className="flex justify-between"><img src={dankoGroupLogo} alt="DANKO GROUP" className="h-auto w-[118px] object-contain" /><div className="pt-1 text-xs font-bold italic">Mẫu số: BM04/QLTS</div></div>
               <h3 className="mt-2 text-center text-lg font-bold">BIÊN BẢN THANH LÝ TÀI SẢN</h3><p className="text-center italic">Số: {documentNo || '...... / BBTLTS'}</p><p>Hôm nay, ngày {formatDate(documentDate)} tại {location || '................................'}.</p><p>Chúng tôi gồm:</p>{attendees.map((attendee, index) => <p key={index}>{index + 1}. Ông/Bà: {attendee.name || '........................'} <span className="ml-8">Bộ phận: {attendee.department || '........................'}</span></p>)}<p>Cùng tiến hành thanh lý tài sản với nội dung như sau:</p><p className="font-bold">I. Tài sản thanh lý:</p>
               <div className="overflow-x-auto"><table className="w-full border-collapse text-[9px]"><thead><tr className="bg-slate-50"><th className="border border-black p-1">STT</th><th className="border border-black p-1">Mã tài sản</th><th className="border border-black p-1">Mô tả kỹ thuật</th><th className="border border-black p-1">Năm sử dụng</th><th className="border border-black p-1">Nguyên giá</th><th className="border border-black p-1">Khấu hao còn lại</th><th className="border border-black p-1">Tình trạng</th><th className="border border-black p-1">Ghi chú</th></tr></thead><tbody>{preparedAssets.map((asset, index) => <tr key={asset.id}><td className="border border-black p-1 text-center">{index + 1}</td><td className="border border-black p-1 text-center">{asset.assetCode}</td><td className="whitespace-pre-line border border-black p-1">{asset.description}</td><td className="border border-black p-1 text-center">{asset.yearInUse}</td><td className="border border-black p-1 text-right">{formatMoney(asset.purchasePriceExVat)}</td><td className="border border-black p-1 text-right">{formatMoney(asset.remainingValue)}</td><td className="border border-black p-1">{asset.actualCondition}</td><td className="border border-black p-1">{asset.note}</td></tr>)}</tbody></table></div>
               <p className="mt-2 font-bold">II. Hình thức thanh lý:</p><p className="min-h-5 border-b border-dotted border-slate-700">{method}</p><p className="font-bold">III. Kết quả thanh lý TSCĐ:</p><p className="border-b border-dotted border-slate-700">- Chi phí thanh lý TSCĐ: {formatMoney(liquidationCost)} {liquidationCost ? 'đ' : ''}</p><p className="border-b border-dotted border-slate-700">- Giá trị thu hồi: {formatMoney(recoveryValue)} {recoveryValue ? 'đ' : ''}</p>
