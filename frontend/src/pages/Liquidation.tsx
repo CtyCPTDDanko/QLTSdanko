@@ -17,16 +17,22 @@ import {
   FileCheck,
   Printer,
   ArrowDownAZ,
-  ArrowUpAZ
+  ArrowUpAZ,
+  ArrowUpDown
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
+
+type LiquidationSortKey = 'asset' | 'level4' | 'document' | 'type' | 'date' | 'price' | 'status';
 
 export const Liquidation: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [reports, setReports] = useState<any[]>([]);
   const [selectedReportKeys, setSelectedReportKeys] = useState<string[]>([]);
-  const [assetNameSort, setAssetNameSort] = useState<'asc' | 'desc'>('asc');
+  const [reportSort, setReportSort] = useState<{ key: LiquidationSortKey; direction: 'asc' | 'desc' }>({
+    key: 'asset',
+    direction: 'asc'
+  });
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   
@@ -159,13 +165,52 @@ export const Liquidation: React.FC = () => {
   const getReportKey = (asset: any) => `${asset.liquidationRecord?.id || 'unknown'}-${asset.id}`;
   const selectedReports = reports.filter((asset) => selectedReportKeys.includes(getReportKey(asset)));
   const isAllReportsSelected = reports.length > 0 && selectedReportKeys.length === reports.length;
+  const toggleReportSort = (key: LiquidationSortKey) => {
+    setReportSort((current) => current.key === key
+      ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+      : { key, direction: 'asc' });
+  };
+
+  const getReportSortValue = (asset: any, key: LiquidationSortKey): string | number => {
+    switch (key) {
+      case 'asset': return `${asset.assetName || ''} ${asset.assetCode || ''}`;
+      case 'level4': return `${asset.level4Name || ''} ${asset.level4Code || ''}`;
+      case 'document': return asset.liquidationRecord?.liquidationCode || asset.liquidationRecord?.documentNo || '';
+      case 'type': return liquidationTypeLabel(asset.liquidationRecord?.liquidationType);
+      case 'date': return asset.liquidationRecord?.liquidationDate ? new Date(asset.liquidationRecord.liquidationDate).getTime() : 0;
+      case 'price': return Number(asset.purchasePriceExVat || 0);
+      case 'status': return 'Đã khóa';
+    }
+  };
+
   const sortedReports = [...reports].sort((left, right) => {
-    const comparison = String(left.assetName || '').localeCompare(String(right.assetName || ''), 'vi', {
-      sensitivity: 'base',
-      numeric: true
-    });
-    return assetNameSort === 'asc' ? comparison : -comparison;
+    const leftValue = getReportSortValue(left, reportSort.key);
+    const rightValue = getReportSortValue(right, reportSort.key);
+    const comparison = typeof leftValue === 'number' && typeof rightValue === 'number'
+      ? leftValue - rightValue
+      : String(leftValue).localeCompare(String(rightValue), 'vi', { sensitivity: 'base', numeric: true });
+    return reportSort.direction === 'asc' ? comparison : -comparison;
   });
+
+  const renderSortHeader = (label: string, key: LiquidationSortKey) => {
+    const isActive = reportSort.key === key;
+    const title = isActive
+      ? `Đang sắp xếp ${reportSort.direction === 'asc' ? 'A–Z' : 'Z–A'}. Bấm để đảo thứ tự.`
+      : `Sắp xếp ${label} A–Z`;
+    return (
+      <button
+        type="button"
+        onClick={() => toggleReportSort(key)}
+        className={`inline-flex items-center gap-1.5 transition-colors hover:text-slate-700 ${isActive ? 'text-slate-700' : ''}`}
+        title={title}
+      >
+        {label}
+        {isActive
+          ? (reportSort.direction === 'asc' ? <ArrowDownAZ className="h-3.5 w-3.5" /> : <ArrowUpAZ className="h-3.5 w-3.5" />)
+          : <ArrowUpDown className="h-3.5 w-3.5 opacity-60" />}
+      </button>
+    );
+  };
 
   const toggleReportSelection = (asset: any) => {
     const key = getReportKey(asset);
@@ -295,23 +340,13 @@ export const Liquidation: React.FC = () => {
                     className="h-4 w-4 cursor-pointer rounded border-slate-300 text-slate-900 focus:ring-slate-500"
                   />
                 </th>
-                <th className="px-6 py-4">
-                  <button
-                    type="button"
-                    onClick={() => setAssetNameSort((current) => current === 'asc' ? 'desc' : 'asc')}
-                    className="inline-flex items-center gap-1.5 transition-colors hover:text-slate-700"
-                    title={assetNameSort === 'asc' ? 'Đang sắp xếp A–Z. Bấm để sắp xếp Z–A.' : 'Đang sắp xếp Z–A. Bấm để sắp xếp A–Z.'}
-                  >
-                    Tài sản
-                    {assetNameSort === 'asc' ? <ArrowDownAZ className="h-3.5 w-3.5" /> : <ArrowUpAZ className="h-3.5 w-3.5" />}
-                  </button>
-                </th>
-                <th className="px-6 py-4">Nhóm LV4</th>
-                <th className="px-6 py-4">Số hồ sơ</th>
-                <th className="px-6 py-4">Loại thanh lý</th>
-                <th className="px-6 py-4">Ngày thanh lý</th>
-                <th className="px-6 py-4">Nguyên giá</th>
-                <th className="px-6 py-4">Trạng thái</th>
+                <th className="px-6 py-4">{renderSortHeader('Tài sản', 'asset')}</th>
+                <th className="px-6 py-4">{renderSortHeader('Nhóm LV4', 'level4')}</th>
+                <th className="px-6 py-4">{renderSortHeader('Số hồ sơ', 'document')}</th>
+                <th className="px-6 py-4">{renderSortHeader('Loại thanh lý', 'type')}</th>
+                <th className="px-6 py-4">{renderSortHeader('Ngày thanh lý', 'date')}</th>
+                <th className="px-6 py-4">{renderSortHeader('Nguyên giá', 'price')}</th>
+                <th className="px-6 py-4">{renderSortHeader('Trạng thái', 'status')}</th>
                 <th className="px-6 py-4 text-right">Biên bản</th>
               </tr>
             </thead>
