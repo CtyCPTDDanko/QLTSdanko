@@ -57,7 +57,7 @@ router.get('/liquidation', authenticateToken, async (req: any, res) => {
       where,
       include: {
         items: {
-          include: { asset: true },
+          include: { asset: { include: { financeProfile: true } } },
           orderBy: { id: 'asc' }
         }
       },
@@ -84,7 +84,7 @@ router.get('/liquidation/asset/:assetId/pdf', authenticateToken, async (req: any
         liquidationRecord: {
           include: {
             items: {
-              include: { asset: true },
+              include: { asset: { include: { financeProfile: true } } },
               orderBy: { id: 'asc' }
             }
           }
