@@ -35,6 +35,11 @@ const formatMoney = (value: unknown) => {
   return Number.isFinite(number) ? number.toLocaleString('vi-VN') : '';
 };
 
+const printableCondition = (value: unknown) => {
+  const condition = String(value || '').trim();
+  return condition.toUpperCase() === 'MISSING' ? 'Tài sản không thể tiếp tục sử dụng' : condition;
+};
+
 const technicalDescription = (asset: Asset) => {
   const raw = asset.technicalSpecsJson;
   if (!raw) return asset.assetName || '';
@@ -80,7 +85,7 @@ export const LiquidationMinutesModal: React.FC<Props> = ({ assets, onClose }) =>
     description: technicalDescription(asset),
     yearInUse: asset.handoverDate ? new Date(asset.handoverDate).getFullYear() : '',
     remainingValue: asset.financeProfile?.remainingValue,
-    actualCondition: asset.lastInventoryStatus || '',
+    actualCondition: printableCondition(asset.lastInventoryStatus),
     note: asset.liquidationRecord?.note || asset.liquidationRecord?.reason || ''
   })), [assets]);
 
