@@ -60,10 +60,13 @@ const escapeHtml = (value: unknown) => String(value ?? '')
 
 export const LiquidationMinutesModal: React.FC<Props> = ({ assets, onClose }) => {
   const record = assets[0]?.liquidationRecord;
+  const [template, setTemplate] = useState<'LIQUIDATION' | 'DESTRUCTION'>(record?.liquidationType === 'DISPOSE' ? 'DESTRUCTION' : 'LIQUIDATION');
+  const isDestruction = template === 'DESTRUCTION';
   const [documentNo, setDocumentNo] = useState(record?.liquidationCode || '');
   const [documentDate, setDocumentDate] = useState(asDateInput(record?.liquidationDate));
   const [location, setLocation] = useState(assets[0]?.locationName || '');
   const [attendees, setAttendees] = useState([
+    { name: '', department: '' },
     { name: '', department: '' },
     { name: '', department: '' },
     { name: '', department: '' }
@@ -87,7 +90,16 @@ export const LiquidationMinutesModal: React.FC<Props> = ({ assets, onClose }) =>
 
   const openPrintWindow = () => {
     const logoUrl = new URL(dankoGroupLogo, window.location.origin).href;
-    const rows = preparedAssets.map((asset, index) => `
+    const displayedAttendees = isDestruction ? attendees : attendees.slice(0, 3);
+    const rows = preparedAssets.map((asset, index) => isDestruction ? `
+      <tr>
+        <td class="center">${index + 1}</td>
+        <td class="center">${escapeHtml(asset.assetCode)}</td>
+        <td>${escapeHtml(asset.description).replace(/\n/g, '<br>')}</td>
+        <td>${escapeHtml(asset.departmentName || asset.department || '')}</td>
+        <td>${escapeHtml(asset.actualCondition)}</td>
+        <td>${escapeHtml(asset.note)}</td>
+      </tr>` : `
       <tr>
         <td class="center">${index + 1}</td>
         <td class="center">${escapeHtml(asset.assetCode)}</td>
@@ -98,28 +110,37 @@ export const LiquidationMinutesModal: React.FC<Props> = ({ assets, onClose }) =>
         <td>${escapeHtml(asset.actualCondition)}</td>
         <td>${escapeHtml(asset.note)}</td>
       </tr>`).join('');
-    const attendeeLines = attendees.map((attendee, index) => `${index + 1}. Ông/Bà: ${escapeHtml(attendee.name || '................................')} <span class="department">Bộ phận: ${escapeHtml(attendee.department || '................................')}</span>`).join('<br>');
+    const attendeeLines = displayedAttendees.map((attendee, index) => `${index + 1}. Ông/Bà: ${escapeHtml(attendee.name || '................................')} <span class="department">Phòng ban/bộ phận: ${escapeHtml(attendee.department || '................................')}</span>`).join('<br>');
+    const documentTitle = isDestruction ? 'BIÊN BẢN TIÊU HỦY' : 'BIÊN BẢN THANH LÝ TÀI SẢN';
+    const documentSubTitle = isDestruction ? 'Tài sản không còn giá trị sử dụng' : '';
+    const formNo = isDestruction ? 'BM05/QLTS' : 'BM04/QLTS';
+    const tableHeader = isDestruction
+      ? '<tr><th style="width:6%">STT</th><th style="width:16%">Mã tài sản</th><th style="width:30%">Mô tả kỹ thuật</th><th style="width:17%">Phòng/Ban</th><th style="width:16%">Tình trạng</th><th style="width:15%">Ghi chú</th></tr>'
+      : '<tr><th style="width:5%">STT</th><th style="width:12%">Mã tài sản</th><th style="width:27%">Mô tả kỹ thuật</th><th style="width:8%">Năm sử dụng</th><th style="width:13%">Nguyên giá</th><th style="width:13%">Khấu hao còn lại</th><th style="width:11%">Tình trạng</th><th style="width:11%">Ghi chú</th></tr>';
+    const postContent = isDestruction
+      ? '<div class="post"><p class="section">II. Kết luận của tài sản:</p><p class="line"></p></div>'
+      : `<div class="post"><p class="section">II. Hình thức thanh lý:</p><p class="line">${escapeHtml(method)}</p><p class="section">III. Kết quả thanh lý TSCĐ:</p><p class="line">- Chi phí thanh lý TSCĐ: ${escapeHtml(formatMoney(liquidationCost))}${liquidationCost ? ' đ' : ''} <i>(viết bằng chữ)</i></p><p class="line">- Giá trị thu hồi: ${escapeHtml(formatMoney(recoveryValue))}${recoveryValue ? ' đ' : ''} <i>(viết bằng chữ)</i></p></div>`;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    printWindow.document.write(`<!doctype html><html><head><title>Biên bản thanh lý tài sản</title><style>
+    printWindow.document.write(`<!doctype html><html><head><title>${documentTitle}</title><style>
       @page { size: A4 portrait; margin: 13mm; }
       * { box-sizing: border-box; } body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #000; margin: 0; }
       .header { display:flex; justify-content:space-between; align-items:flex-start; } .brand-logo { display:block; width:118px; height:auto; object-fit:contain; } .form { font-size:10pt; font-weight:bold; font-style:italic; }
-      h1 { font-size:16pt; text-align:center; margin: 12px 0 1px; } .number { text-align:center; font-style:italic; margin-bottom:12px; }
+      h1 { font-size:16pt; text-align:center; margin: 12px 0 1px; } .subtitle { text-align:center; font-style:italic; margin: 0 0 1px; } .number { text-align:center; font-style:italic; margin-bottom:12px; }
       p { margin:3px 0; line-height:1.25; } .department { display:inline-block; min-width:45%; margin-left:14px; } .section { font-weight:bold; margin-top:6px; }
       table { border-collapse:collapse; width:100%; margin-top:3px; font-size:9.2pt; } thead { display:table-header-group; } tr { break-inside:avoid; page-break-inside:avoid; } th, td { border:0.7px solid #111; padding:4px 3px; vertical-align:top; } th { text-align:center; font-weight:bold; } .center { text-align:center; } .money { text-align:right; white-space:nowrap; }
       .post { margin-top:7px; } .line { border-bottom: 1px dotted #333; min-height:19px; } .date { margin-top:18px; text-align:right; font-style:italic; } .signatures { display:flex; justify-content:space-between; gap:16px; margin-top:12px; text-align:center; font-weight:bold; } .signatures > div { width:33%; min-height:78px; } .signatures em { display:block; margin-top:3px; font-weight:normal; font-size:10pt; }
       .footer { position:fixed; bottom:4mm; left:0; right:0; text-align:center; font-size:8pt; color:#555; } 
     </style></head><body>
-      <div class="header"><img class="brand-logo" src="${escapeHtml(logoUrl)}" alt="DANKO GROUP"><div class="form">Mẫu số: BM04/QLTS</div></div>
-      <h1>BIÊN BẢN THANH LÝ TÀI SẢN</h1><div class="number">Số: ${escapeHtml(documentNo || '...... / BBTLTS')}</div>
+      <div class="header"><img class="brand-logo" src="${escapeHtml(logoUrl)}" alt="DANKO GROUP"><div class="form">Mẫu số: ${formNo}</div></div>
+      <h1>${documentTitle}</h1>${documentSubTitle ? `<p class="subtitle">${documentSubTitle}</p>` : ''}<div class="number">Số: ${escapeHtml(documentNo || (isDestruction ? '...... / BBTH' : '...... / BBTLTS'))}</div>
       <p>Hôm nay, ngày ${escapeHtml(formatDate(documentDate))} tại ${escapeHtml(location || '........................................................')}.</p>
       <p>Chúng tôi gồm:</p><p>${attendeeLines}</p><p>Cùng tiến hành thanh lý tài sản với nội dung như sau:</p>
-      <p class="section">I. Tài sản thanh lý:</p>
-      <table><thead><tr><th style="width:5%">STT</th><th style="width:12%">Mã tài sản</th><th style="width:27%">Mô tả kỹ thuật</th><th style="width:8%">Năm sử dụng</th><th style="width:13%">Nguyên giá</th><th style="width:13%">Khấu hao còn lại</th><th style="width:11%">Tình trạng</th><th style="width:11%">Ghi chú</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="post"><p class="section">II. Hình thức thanh lý:</p><p class="line">${escapeHtml(method)}</p><p class="section">III. Kết quả thanh lý TSCĐ:</p><p class="line">- Chi phí thanh lý TSCĐ: ${escapeHtml(formatMoney(liquidationCost))}${liquidationCost ? ' đ' : ''} <i>(viết bằng chữ)</i></p><p class="line">- Giá trị thu hồi: ${escapeHtml(formatMoney(recoveryValue))}${recoveryValue ? ' đ' : ''} <i>(viết bằng chữ)</i></p></div>
+      <p class="section">I. Tài sản ${isDestruction ? 'tiêu hủy' : 'thanh lý'}:</p>
+      <table><thead>${tableHeader}</thead><tbody>${rows}</tbody></table>
+      ${postContent}
       <p class="date">Ngày ...... tháng ...... năm ........</p><div class="signatures"><div>BLĐ phê duyệt<em>(Ký, ghi rõ họ tên)</em></div><div>Trưởng Ban thanh lý<em>(Ký, ghi rõ họ tên)</em></div><div>Người lập biểu<em>(Ký, ghi rõ họ tên)</em></div></div>
-      <div class="footer">Biên bản thanh lý tài sản - BM04/QLTS</div></body></html>`);
+      <div class="footer">${documentTitle} - ${formNo}</div></body></html>`);
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
@@ -130,24 +151,24 @@ export const LiquidationMinutesModal: React.FC<Props> = ({ assets, onClose }) =>
       <div className="mx-auto flex min-h-full max-w-7xl items-center py-6">
         <div className="w-full overflow-hidden rounded-3xl bg-slate-100 shadow-2xl">
           <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
-            <div><h2 className="text-xl font-black text-slate-900">Biên bản thanh lý tài sản</h2><p className="text-xs text-slate-500">Mẫu BM04/QLTS - {preparedAssets.length} tài sản được chọn</p></div>
+            <div><h2 className="text-xl font-black text-slate-900">{isDestruction ? 'Biên bản tiêu hủy tài sản' : 'Biên bản thanh lý tài sản'}</h2><p className="text-xs text-slate-500">Mẫu {isDestruction ? 'BM05/QLTS' : 'BM04/QLTS'} - {preparedAssets.length} tài sản được chọn</p></div>
             <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Đóng"><X className="h-5 w-5" /></button>
           </div>
           <div className="grid max-h-[72vh] overflow-y-auto lg:grid-cols-[330px_minmax(0,1fr)]">
             <section className="space-y-4 border-b border-slate-200 bg-white p-5 lg:border-b-0 lg:border-r">
               <p className="text-xs font-black uppercase tracking-wider text-slate-500">Thông tin trước khi in</p>
+              <label className="block text-xs font-bold text-slate-600">Loại biên bản<select value={template} onChange={(event) => setTemplate(event.target.value as 'LIQUIDATION' | 'DESTRUCTION')} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-primary-500"><option value="LIQUIDATION">Biên bản thanh lý — BM04/QLTS</option><option value="DESTRUCTION">Biên bản tiêu hủy — BM05/QLTS</option></select></label>
               <label className="block text-xs font-bold text-slate-600">Số biên bản<input value={documentNo} onChange={(event) => setDocumentNo(event.target.value)} placeholder=".../BBTLTS" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label>
               <label className="block text-xs font-bold text-slate-600">Ngày lập<input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label>
               <label className="block text-xs font-bold text-slate-600">Địa điểm<input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Nhập địa điểm lập biên bản" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label>
-              {attendees.map((attendee, index) => <div key={index} className="grid grid-cols-2 gap-2"><input value={attendee.name} onChange={(event) => updateAttendee(index, 'name', event.target.value)} placeholder={`Ông/Bà ${index + 1}`} className="rounded-lg border border-slate-300 px-3 py-2 text-xs outline-none focus:border-primary-500" /><input value={attendee.department} onChange={(event) => updateAttendee(index, 'department', event.target.value)} placeholder="Bộ phận" className="rounded-lg border border-slate-300 px-3 py-2 text-xs outline-none focus:border-primary-500" /></div>)}
-              <label className="block text-xs font-bold text-slate-600">Hình thức thanh lý<input value={method} onChange={(event) => setMethod(event.target.value)} placeholder="Nhập hình thức thanh lý" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label>
-              <div className="grid grid-cols-2 gap-2"><label className="block text-xs font-bold text-slate-600">Chi phí thanh lý<input inputMode="numeric" value={liquidationCost} onChange={(event) => setLiquidationCost(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label><label className="block text-xs font-bold text-slate-600">Giá trị thu hồi<input inputMode="numeric" value={recoveryValue} onChange={(event) => setRecoveryValue(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label></div>
+              {attendees.slice(0, isDestruction ? 4 : 3).map((attendee, index) => <div key={index} className="grid grid-cols-2 gap-2"><input value={attendee.name} onChange={(event) => updateAttendee(index, 'name', event.target.value)} placeholder={`Ông/Bà ${index + 1}`} className="rounded-lg border border-slate-300 px-3 py-2 text-xs outline-none focus:border-primary-500" /><input value={attendee.department} onChange={(event) => updateAttendee(index, 'department', event.target.value)} placeholder="Phòng ban/bộ phận" className="rounded-lg border border-slate-300 px-3 py-2 text-xs outline-none focus:border-primary-500" /></div>)}
+              {!isDestruction && <><label className="block text-xs font-bold text-slate-600">Hình thức thanh lý<input value={method} onChange={(event) => setMethod(event.target.value)} placeholder="Nhập hình thức thanh lý" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label><div className="grid grid-cols-2 gap-2"><label className="block text-xs font-bold text-slate-600">Chi phí thanh lý<input inputMode="numeric" value={liquidationCost} onChange={(event) => setLiquidationCost(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label><label className="block text-xs font-bold text-slate-600">Giá trị thu hồi<input inputMode="numeric" value={recoveryValue} onChange={(event) => setRecoveryValue(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary-500" /></label></div></>}
             </section>
             <section className="bg-slate-200 p-4 sm:p-7"><div className="mx-auto max-w-[794px] bg-white px-6 py-5 text-[11px] font-serif text-slate-950 shadow-sm sm:px-9">
-              <div className="flex justify-between"><img src={dankoGroupLogo} alt="DANKO GROUP" className="h-auto w-[118px] object-contain" /><div className="pt-1 text-xs font-bold italic">Mẫu số: BM04/QLTS</div></div>
-              <h3 className="mt-2 text-center text-lg font-bold">BIÊN BẢN THANH LÝ TÀI SẢN</h3><p className="text-center italic">Số: {documentNo || '...... / BBTLTS'}</p><p>Hôm nay, ngày {formatDate(documentDate)} tại {location || '................................'}.</p><p>Chúng tôi gồm:</p>{attendees.map((attendee, index) => <p key={index}>{index + 1}. Ông/Bà: {attendee.name || '........................'} <span className="ml-8">Bộ phận: {attendee.department || '........................'}</span></p>)}<p>Cùng tiến hành thanh lý tài sản với nội dung như sau:</p><p className="font-bold">I. Tài sản thanh lý:</p>
-              <div className="overflow-x-auto"><table className="w-full border-collapse text-[9px]"><thead><tr className="bg-slate-50"><th className="border border-black p-1">STT</th><th className="border border-black p-1">Mã tài sản</th><th className="border border-black p-1">Mô tả kỹ thuật</th><th className="border border-black p-1">Năm sử dụng</th><th className="border border-black p-1">Nguyên giá</th><th className="border border-black p-1">Khấu hao còn lại</th><th className="border border-black p-1">Tình trạng</th><th className="border border-black p-1">Ghi chú</th></tr></thead><tbody>{preparedAssets.map((asset, index) => <tr key={asset.id}><td className="border border-black p-1 text-center">{index + 1}</td><td className="border border-black p-1 text-center">{asset.assetCode}</td><td className="whitespace-pre-line border border-black p-1">{asset.description}</td><td className="border border-black p-1 text-center">{asset.yearInUse}</td><td className="border border-black p-1 text-right">{formatMoney(asset.purchasePriceExVat)}</td><td className="border border-black p-1 text-right">{formatMoney(asset.remainingValue)}</td><td className="border border-black p-1">{asset.actualCondition}</td><td className="border border-black p-1">{asset.note}</td></tr>)}</tbody></table></div>
-              <p className="mt-2 font-bold">II. Hình thức thanh lý:</p><p className="min-h-5 border-b border-dotted border-slate-700">{method}</p><p className="font-bold">III. Kết quả thanh lý TSCĐ:</p><p className="border-b border-dotted border-slate-700">- Chi phí thanh lý TSCĐ: {formatMoney(liquidationCost)} {liquidationCost ? 'đ' : ''}</p><p className="border-b border-dotted border-slate-700">- Giá trị thu hồi: {formatMoney(recoveryValue)} {recoveryValue ? 'đ' : ''}</p>
+              <div className="flex justify-between"><img src={dankoGroupLogo} alt="DANKO GROUP" className="h-auto w-[118px] object-contain" /><div className="pt-1 text-xs font-bold italic">Mẫu số: {isDestruction ? 'BM05/QLTS' : 'BM04/QLTS'}</div></div>
+              <h3 className="mt-2 text-center text-lg font-bold">{isDestruction ? 'BIÊN BẢN TIÊU HỦY' : 'BIÊN BẢN THANH LÝ TÀI SẢN'}</h3>{isDestruction && <p className="text-center italic">Tài sản không còn giá trị sử dụng</p>}<p className="text-center italic">Số: {documentNo || (isDestruction ? '...... / BBTH' : '...... / BBTLTS')}</p><p>Hôm nay, ngày {formatDate(documentDate)} tại {location || '................................'}.</p><p>Chúng tôi gồm:</p>{attendees.slice(0, isDestruction ? 4 : 3).map((attendee, index) => <p key={index}>{index + 1}. Ông/Bà: {attendee.name || '........................'} <span className="ml-8">Phòng ban/bộ phận: {attendee.department || '........................'}</span></p>)}<p>Cùng tiến hành {isDestruction ? 'tiêu hủy' : 'thanh lý'} tài sản với nội dung như sau:</p><p className="font-bold">I. Tài sản {isDestruction ? 'tiêu hủy' : 'thanh lý'}:</p>
+              <div className="overflow-x-auto"><table className="w-full border-collapse text-[9px]"><thead><tr className="bg-slate-50">{isDestruction ? <><th className="border border-black p-1">STT</th><th className="border border-black p-1">Mã tài sản</th><th className="border border-black p-1">Mô tả kỹ thuật</th><th className="border border-black p-1">Phòng/Ban</th><th className="border border-black p-1">Tình trạng</th><th className="border border-black p-1">Ghi chú</th></> : <><th className="border border-black p-1">STT</th><th className="border border-black p-1">Mã tài sản</th><th className="border border-black p-1">Mô tả kỹ thuật</th><th className="border border-black p-1">Năm sử dụng</th><th className="border border-black p-1">Nguyên giá</th><th className="border border-black p-1">Khấu hao còn lại</th><th className="border border-black p-1">Tình trạng</th><th className="border border-black p-1">Ghi chú</th></>}</tr></thead><tbody>{preparedAssets.map((asset, index) => <tr key={asset.id}><td className="border border-black p-1 text-center">{index + 1}</td><td className="border border-black p-1 text-center">{asset.assetCode}</td><td className="whitespace-pre-line border border-black p-1">{asset.description}</td>{isDestruction ? <><td className="border border-black p-1">{asset.departmentName || asset.department || ''}</td><td className="border border-black p-1">{asset.actualCondition}</td><td className="border border-black p-1">{asset.note}</td></> : <><td className="border border-black p-1 text-center">{asset.yearInUse}</td><td className="border border-black p-1 text-right">{formatMoney(asset.purchasePriceExVat)}</td><td className="border border-black p-1 text-right">{formatMoney(asset.remainingValue)}</td><td className="border border-black p-1">{asset.actualCondition}</td><td className="border border-black p-1">{asset.note}</td></>}</tr>)}</tbody></table></div>
+              {isDestruction ? <><p className="mt-2 font-bold">II. Kết luận của tài sản:</p><p className="min-h-5 border-b border-dotted border-slate-700" /></> : <><p className="mt-2 font-bold">II. Hình thức thanh lý:</p><p className="min-h-5 border-b border-dotted border-slate-700">{method}</p><p className="font-bold">III. Kết quả thanh lý TSCĐ:</p><p className="border-b border-dotted border-slate-700">- Chi phí thanh lý TSCĐ: {formatMoney(liquidationCost)} {liquidationCost ? 'đ' : ''}</p><p className="border-b border-dotted border-slate-700">- Giá trị thu hồi: {formatMoney(recoveryValue)} {recoveryValue ? 'đ' : ''}</p></>}
               <p className="mt-5 text-right italic">Ngày ...... tháng ...... năm ........</p><div className="mt-3 grid grid-cols-3 gap-2 text-center font-bold"><div>BLĐ phê duyệt<br /><span className="font-normal italic">(Ký, ghi rõ họ tên)</span></div><div>Trưởng Ban thanh lý<br /><span className="font-normal italic">(Ký, ghi rõ họ tên)</span></div><div>Người lập biểu<br /><span className="font-normal italic">(Ký, ghi rõ họ tên)</span></div></div>
             </div></section>
           </div>
