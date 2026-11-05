@@ -42,6 +42,6 @@
     "react-router-dom": "^7.18.4",
     "react-toastify": "^11.1.0",
     "tailwind-merge": "^3.5.0",
-    "zod": "^4.4.2"
+    "zod": "^4.6.6"
   }
 }
